@@ -756,6 +756,24 @@ textarea {
   font-size: 12px;
 }
 
+.queue-stop-fields {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.queue-stop-fields input,
+.queue-stop-fields textarea {
+  min-width: 0;
+  border: 1px solid #f4e4d2;
+  background: #fffaf5;
+}
+
+.queue-stop-fields textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
 .queue-row-actions {
   display: grid;
   grid-auto-flow: column;
@@ -1396,6 +1414,14 @@ textarea {
 
   .search-origin-toggle {
     grid-template-columns: 1fr;
+  }
+
+  .route-queue-list article {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .queue-row-actions {
+    grid-column: 1 / -1;
   }
 
   .active-stop-actions {

@@ -35,6 +35,11 @@ type DestinationMode = "search" | "nearby" | "coordinates";
 type MemoryScope = "active" | "all";
 type SearchOrigin = "context" | "route" | "map";
 type ShareStatus = "idle" | "copied";
+type QueuedPlace = {
+  place: PlaceSearchResult;
+  title: string;
+  note: string;
+};
 
 const placeChipGroups = [
   {
@@ -134,7 +139,7 @@ export function App() {
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [manualLabel, setManualLabel] = useState("");
-  const [routeQueue, setRouteQueue] = useState<PlaceSearchResult[]>([]);
+  const [routeQueue, setRouteQueue] = useState<QueuedPlace[]>([]);
   const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
   const [searchOrigin, setSearchOrigin] = useState<SearchOrigin>("context");
   const [searchingPlaces, setSearchingPlaces] = useState(false);
@@ -309,7 +314,7 @@ export function App() {
       : mapFocus
         ? "map center"
         : "the map";
-  const routeSearchAnchor = routeQueue[routeQueue.length - 1];
+  const routeSearchAnchor = routeQueue[routeQueue.length - 1]?.place;
   const searchAnchor =
     searchOrigin === "route" && routeSearchAnchor
       ? routeSearchAnchor
@@ -331,10 +336,10 @@ export function App() {
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
   }, [placeResults, searchAnchor]);
-  const queuedPlaceIds = useMemo(() => new Set(routeQueue.map((place) => place.id)), [routeQueue]);
+  const queuedPlaceIds = useMemo(() => new Set(routeQueue.map((item) => item.place.id)), [routeQueue]);
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
-    routeQueue.forEach((place) => previews.set(place.id, place));
+    routeQueue.forEach((item) => previews.set(item.place.id, item.place));
     if (placeDraft) previews.set(placeDraft.id, placeDraft);
     return [...previews.values()];
   }, [placeDraft, routeQueue]);
@@ -721,17 +726,21 @@ export function App() {
   }
 
   function queuePlace(place: PlaceSearchResult) {
-    setRouteQueue((items) => (items.some((item) => item.id === place.id) ? items : [...items, place]));
+    setRouteQueue((items) =>
+      items.some((item) => item.place.id === place.id)
+        ? items
+        : [...items, { place, title: place.name, note: "" }]
+    );
     setSearchOrigin("route");
   }
 
   function removeQueuedPlace(placeId: string) {
-    setRouteQueue((items) => items.filter((item) => item.id !== placeId));
+    setRouteQueue((items) => items.filter((item) => item.place.id !== placeId));
   }
 
   function moveQueuedPlace(placeId: string, direction: -1 | 1) {
     setRouteQueue((items) => {
-      const index = items.findIndex((item) => item.id === placeId);
+      const index = items.findIndex((item) => item.place.id === placeId);
       const swapIndex = index + direction;
       if (index < 0 || swapIndex < 0 || swapIndex >= items.length) return items;
       const next = [...items];
@@ -742,24 +751,30 @@ export function App() {
     });
   }
 
+  function updateQueuedPlace(placeId: string, input: Partial<Pick<QueuedPlace, "title" | "note">>) {
+    setRouteQueue((items) =>
+      items.map((item) => (item.place.id === placeId ? { ...item, ...input } : item))
+    );
+  }
+
   function optimizeQueuedPlaces() {
     setRouteQueue((items) => {
       if (items.length < 3) return items;
       const remaining = [...items];
-      const ordered: PlaceSearchResult[] = [];
+      const ordered: QueuedPlace[] = [];
       let cursor: { lat: number; lng: number } | null = queueAnchor;
       while (remaining.length) {
         const origin = cursor;
         const nextIndex = origin
-          ? remaining.reduce((bestIndex, place, index) => {
+          ? remaining.reduce((bestIndex, item, index) => {
               const best = remaining[bestIndex]!;
-              return distanceKm(origin, place) < distanceKm(origin, best) ? index : bestIndex;
+              return distanceKm(origin, item.place) < distanceKm(origin, best.place) ? index : bestIndex;
             }, 0)
           : 0;
         const [next] = remaining.splice(nextIndex, 1);
         if (!next) break;
         ordered.push(next);
-        cursor = next;
+        cursor = next.place;
       }
       return ordered;
     });
@@ -773,10 +788,11 @@ export function App() {
     try {
       await makeRoomForSortOrder(sortOrder, routeQueue.length);
       const created: Stop[] = [];
-      for (const [index, place] of routeQueue.entries()) {
+      for (const [index, item] of routeQueue.entries()) {
+        const place = item.place;
         const { stop } = await api.addStop(selectedTripId, {
-          title: place.name || `Stop ${sortOrder + index + 1}`,
-          note: "",
+          title: item.title.trim() || place.name || `Stop ${sortOrder + index + 1}`,
+          note: item.note.trim(),
           lat: place.lat,
           lng: place.lng,
           sortOrder: sortOrder + index,
@@ -1031,8 +1047,9 @@ export function App() {
     return date ? `${coordinates} · ${date}` : coordinates;
   }
 
-  function queuedLegLabel(place: PlaceSearchResult, index: number) {
-    const previous = index === 0 ? queueAnchor : routeQueue[index - 1];
+  function queuedLegLabel(item: QueuedPlace, index: number) {
+    const previous = index === 0 ? queueAnchor : routeQueue[index - 1]?.place;
+    const place = item.place;
     return previous ? `${formatDistance(distanceKm(previous, place))} leg` : place.category;
   }
 
@@ -1698,16 +1715,27 @@ export function App() {
                     <ListFilter size={17} />
                   </div>
                   <div className="route-queue-list">
-                    {routeQueue.map((place, index) => (
-                      <article key={place.id}>
+                    {routeQueue.map((item, index) => (
+                      <article key={item.place.id}>
                         <span>{index + 1}</span>
-                        <div>
-                          <strong>{place.name}</strong>
-                          <small>{queuedLegLabel(place, index)}</small>
+                        <div className="queue-stop-fields">
+                          <strong>{item.place.name}</strong>
+                          <small>{queuedLegLabel(item, index)}</small>
+                          <input
+                            value={item.title}
+                            onChange={(event) => updateQueuedPlace(item.place.id, { title: event.target.value })}
+                            placeholder="Stop title"
+                          />
+                          <textarea
+                            value={item.note}
+                            onChange={(event) => updateQueuedPlace(item.place.id, { note: event.target.value })}
+                            placeholder="Short note"
+                            rows={2}
+                          />
                         </div>
                         <div className="queue-row-actions">
                           <button
-                            onClick={() => moveQueuedPlace(place.id, -1)}
+                            onClick={() => moveQueuedPlace(item.place.id, -1)}
                             disabled={index === 0}
                             type="button"
                             title="Move up"
@@ -1715,14 +1743,14 @@ export function App() {
                             <ChevronUp size={14} />
                           </button>
                           <button
-                            onClick={() => moveQueuedPlace(place.id, 1)}
+                            onClick={() => moveQueuedPlace(item.place.id, 1)}
                             disabled={index === routeQueue.length - 1}
                             type="button"
                             title="Move down"
                           >
                             <ChevronDown size={14} />
                           </button>
-                          <button onClick={() => removeQueuedPlace(place.id)} type="button" title="Remove from queue">
+                          <button onClick={() => removeQueuedPlace(item.place.id)} type="button" title="Remove from queue">
                             <X size={14} />
                           </button>
                         </div>
