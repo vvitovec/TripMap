@@ -641,6 +641,15 @@ export function App() {
     setPlaceDraft(null);
   }
 
+  function searchFromMapCenter() {
+    if (!mapFocus) {
+      setError("Move the map first, then search around the map center.");
+      return;
+    }
+    setSearchOrigin("map");
+    setError(null);
+  }
+
   function prepareDestinationFromStop(stop: Stop, scope: DestinationScope, mode: DestinationMode = "nearby", query = "") {
     selectStopId(stop.id);
     resetDestinationDraft();
@@ -1823,7 +1832,28 @@ export function App() {
                   ))}
                 </div>
               ) : destinationMode !== "coordinates" && placeQuery.trim().length >= 3 && !searchingPlaces ? (
-                <p className="muted">No places found.</p>
+                <div className="search-empty-state">
+                  <div>
+                    <strong>No places found</strong>
+                    <small>Try a broader category, search around the map center, or drop an exact pin.</small>
+                  </div>
+                  <div className="search-empty-actions">
+                    {placeChips.slice(0, 3).map((chip) => (
+                      <button key={chip.label} onClick={() => searchNearbyCategory(chip.query)} type="button">
+                        <Compass size={14} /> {chip.label}
+                      </button>
+                    ))}
+                    <button onClick={searchFromMapCenter} disabled={!mapFocus} type="button">
+                      <Crosshair size={14} /> Map center
+                    </button>
+                    <button onClick={() => openDestinationMode("coordinates")} type="button">
+                      <MapPin size={14} /> Exact pin
+                    </button>
+                    <button onClick={() => setPlaceQuery("")} type="button">
+                      <X size={14} /> Clear
+                    </button>
+                  </div>
+                </div>
               ) : null}
 
               {routeQueue.length ? (
