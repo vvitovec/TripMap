@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronUp,
   Crosshair,
-  FileText,
   FolderPlus,
   GitBranch,
   GripVertical,
@@ -25,10 +24,11 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { TripMap } from "./TripMap";
-import type { Folder, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
+import type { Folder, MediaItem, Note, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
 
 type AuthMode = "login" | "register";
 type DestinationScope = "main" | "branch";
+type MemoryScope = "active" | "all";
 
 const placeChips = [
   { label: "Hotels", query: "hotel" },
@@ -40,6 +40,14 @@ const placeChips = [
   { label: "Museums", query: "museum" },
   { label: "Fuel", query: "fuel" }
 ];
+
+function mediaUrl(item: MediaItem) {
+  return item.optimizedUrl ?? item.originalUrl ?? undefined;
+}
+
+function mediaThumbUrl(item: MediaItem) {
+  return item.thumbnailUrl ?? item.optimizedUrl ?? item.originalUrl ?? undefined;
+}
 
 export function App() {
   const shareToken = location.pathname.startsWith("/share/")
@@ -69,6 +77,7 @@ export function App() {
   const [newTripFolderId, setNewTripFolderId] = useState("");
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [memoryScope, setMemoryScope] = useState<MemoryScope>("active");
   const [editingTrip, setEditingTrip] = useState(false);
   const [tripTitleDraft, setTripTitleDraft] = useState("");
   const [tripDescriptionDraft, setTripDescriptionDraft] = useState("");
@@ -144,6 +153,11 @@ export function App() {
     () => [...(detail?.stops ?? [])].sort((a, b) => a.sort_order - b.sort_order),
     [detail?.stops]
   );
+  const stopById = useMemo(() => {
+    const stops = new Map<string, Stop>();
+    detail?.stops.forEach((stop) => stops.set(stop.id, stop));
+    return stops;
+  }, [detail?.stops]);
   const stopMediaCounts = useMemo(() => {
     const counts = new Map<string, number>();
     detail?.media.forEach((item) => {
@@ -175,6 +189,52 @@ export function App() {
     : detail?.stops.length
       ? detail.trip.title
       : "the map";
+  const activeMemoryScope = activeStop && memoryScope === "active" ? "active" : "all";
+  const visibleMedia = useMemo(() => {
+    if (!detail) return [];
+    if (activeMemoryScope === "active" && activeStop) {
+      return detail.media.filter((item) => item.stop_id === activeStop.id);
+    }
+    return detail.media;
+  }, [activeMemoryScope, activeStop, detail]);
+  const visibleNotes = useMemo(() => {
+    if (!detail) return [];
+    if (activeMemoryScope === "active" && activeStop) {
+      return detail.notes.filter((note) => note.stop_id === activeStop.id);
+    }
+    return detail.notes;
+  }, [activeMemoryScope, activeStop, detail]);
+  const memoryTitle = activeMemoryScope === "active" && activeStop ? activeStop.title : detail?.trip.title ?? "Trip";
+  const presentationGroups = useMemo(() => {
+    if (!detail) return [];
+    const groups: Array<{ id: string; title: string; subtitle: string; media: MediaItem[]; notes: Note[] }> = [];
+    const tripMedia = detail.media.filter((item) => !item.stop_id);
+    const tripNotes = detail.notes.filter((note) => !note.stop_id);
+    if (tripMedia.length || tripNotes.length || !orderedStops.length) {
+      groups.push({
+        id: "trip",
+        title: detail.trip.title,
+        subtitle: "Trip notes and media",
+        media: tripMedia,
+        notes: tripNotes
+      });
+    }
+    orderedStops.forEach((stop) => {
+      const stopMedia = detail.media.filter((item) => item.stop_id === stop.id);
+      const stopNotes = detail.notes.filter((note) => note.stop_id === stop.id);
+      if (!stopMedia.length && !stopNotes.length && !stop.note) return;
+      groups.push({
+        id: stop.id,
+        title: stop.title,
+        subtitle: branchParentTitle(stop) ? `Side trip from ${branchParentTitle(stop)}` : stopSubtitle(stop),
+        media: stopMedia,
+        notes: stop.note
+          ? [{ id: `${stop.id}-summary`, body: stop.note, stop_id: stop.id, created_at: stop.arrived_at ?? "" }, ...stopNotes]
+          : stopNotes
+      });
+    });
+    return groups;
+  }, [detail, orderedStops, stopMediaCounts, stopNoteCounts]);
 
   useEffect(() => {
     if (!user || !trips.length) return;
@@ -199,6 +259,12 @@ export function App() {
       setDestinationScope("main");
     }
   }, [activeStop, destinationScope]);
+
+  useEffect(() => {
+    if (!activeStop && memoryScope === "active") {
+      setMemoryScope("all");
+    }
+  }, [activeStop, memoryScope]);
 
   useEffect(() => {
     if (!activeStop || editingStop) return;
@@ -269,6 +335,11 @@ export function App() {
     setDraftTitle("");
     setDraftNote("");
     setDestinationScope("main");
+  }
+
+  function selectStopId(id: string | null) {
+    setSelectedStopId(id);
+    if (id) setMemoryScope("active");
   }
 
   async function createTrip(event: React.FormEvent<HTMLFormElement>) {
@@ -343,7 +414,7 @@ export function App() {
         branchOf: destinationScope === "branch" && activeStop ? activeStop.id : null
       });
       setDetail(await api.trip(selectedTripId));
-      setSelectedStopId(stop.id);
+      selectStopId(stop.id);
       setPlaceDraft(null);
       setDraftTitle("");
       setDraftNote("");
@@ -360,7 +431,7 @@ export function App() {
     if (!files || !selectedTripId) return;
     setBusy(true);
     try {
-      await api.upload(selectedTripId, files, selectedStopId);
+      await api.upload(selectedTripId, files, activeMemoryScope === "active" ? selectedStopId : null);
       setDetail(await api.trip(selectedTripId));
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
@@ -373,7 +444,7 @@ export function App() {
     if (!selectedTripId || !noteDraft.trim()) return;
     setBusy(true);
     try {
-      await api.addNote(selectedTripId, noteDraft.trim(), selectedStopId);
+      await api.addNote(selectedTripId, noteDraft.trim(), activeMemoryScope === "active" ? selectedStopId : null);
       setNoteDraft("");
       setDetail(await api.trip(selectedTripId));
     } catch (error) {
@@ -427,7 +498,8 @@ export function App() {
     setBusy(true);
     try {
       await api.deleteStop(selectedTripId, activeStop.id);
-      setSelectedStopId(null);
+      selectStopId(null);
+      setMemoryScope("all");
       setEditingStop(false);
       setDetail(await api.trip(selectedTripId));
       await load();
@@ -470,7 +542,7 @@ export function App() {
 
   function branchParentTitle(stop: Stop) {
     if (!stop.branch_of) return null;
-    return detail?.stops.find((item) => item.id === stop.branch_of)?.title ?? "another stop";
+    return stopById.get(stop.branch_of)?.title ?? "another stop";
   }
 
   if (shareToken) {
@@ -659,7 +731,7 @@ export function App() {
           selectedStopId={selectedStopId}
           previewPlace={placeDraft}
           onSelectTrip={selectTripId}
-          onSelectStop={setSelectedStopId}
+          onSelectStop={selectStopId}
           onMapClick={previewMapPin}
         />
       </section>
@@ -921,39 +993,84 @@ export function App() {
               ) : null}
             </section>
 
-            <label className="upload-box">
-              <Upload />
-              <span>{activeStop ? `Upload to ${activeStop.title}` : "Upload photos or videos"}</span>
-              <input type="file" accept="image/*,video/*" multiple onChange={(event) => upload(event.target.files)} />
-            </label>
-
-            <section className="note-panel">
+            <section className="memory-panel">
               <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">Notes</p>
-                  <h3>{activeStop ? activeStop.title : detail.trip.title}</h3>
+                  <p className="eyebrow">Memories</p>
+                  <h3>{memoryTitle}</h3>
                 </div>
-                <FileText size={18} />
+                <Image size={18} />
               </div>
+              <div className="memory-tabs">
+                <button
+                  className={activeMemoryScope === "active" ? "memory-tab active" : "memory-tab"}
+                  onClick={() => setMemoryScope("active")}
+                  disabled={!activeStop}
+                  type="button"
+                >
+                  <MapPin size={15} /> Selected stop
+                </button>
+                <button
+                  className={activeMemoryScope === "all" ? "memory-tab active" : "memory-tab"}
+                  onClick={() => setMemoryScope("all")}
+                  type="button"
+                >
+                  <Image size={15} /> Whole trip
+                </button>
+              </div>
+              <label className="upload-box">
+                <Upload />
+                <span>
+                  {activeMemoryScope === "active" && activeStop
+                    ? `Upload to ${activeStop.title}`
+                    : "Upload to trip"}
+                </span>
+                <input type="file" accept="image/*,video/*" multiple onChange={(event) => upload(event.target.files)} />
+              </label>
               <textarea
                 value={noteDraft}
                 onChange={(event) => setNoteDraft(event.target.value)}
-                placeholder={activeStop ? "Add a note for this stop" : "Add a trip note"}
+                placeholder={activeMemoryScope === "active" ? "Add a note for this stop" : "Add a trip note"}
                 rows={3}
               />
               <button className="wide-button subtle" onClick={addNote} disabled={busy || !noteDraft.trim()}>
                 <Plus size={16} /> Add note
               </button>
-              <div className="note-list">
-                {detail.notes
-                  .filter((note) => (selectedStopId ? note.stop_id === selectedStopId : !note.stop_id))
-                  .map((note) => (
-                    <article key={note.id}>
-                      <p>{note.body}</p>
-                      <small>{new Date(note.created_at).toLocaleDateString()}</small>
-                    </article>
+              {visibleNotes.length ? (
+                <div className="note-list">
+                  {visibleNotes.map((note) => (
+                      <article key={note.id}>
+                        <p>{note.body}</p>
+                        <small>
+                          {note.stop_id && activeMemoryScope === "all" ? `${stopById.get(note.stop_id)?.title ?? "Stop"} · ` : ""}
+                          {new Date(note.created_at).toLocaleDateString()}
+                        </small>
+                      </article>
+                    ))}
+                </div>
+              ) : (
+                <p className="muted">No notes yet for this view.</p>
+              )}
+              {visibleMedia.length ? (
+                <div className="media-grid">
+                  {visibleMedia.map((item) => (
+                    <figure key={item.id}>
+                      {item.kind === "video" ? (
+                        <video src={mediaUrl(item)} controls />
+                      ) : (
+                        <img src={mediaThumbUrl(item)} alt={item.file_name} />
+                      )}
+                      <figcaption>
+                        {item.stop_id && activeMemoryScope === "all"
+                          ? stopById.get(item.stop_id)?.title ?? item.processing_status
+                          : item.processing_status}
+                      </figcaption>
+                    </figure>
                   ))}
-              </div>
+                </div>
+              ) : (
+                <p className="muted">No photos or videos yet for this view.</p>
+              )}
             </section>
 
             <button className="wide-button" onClick={() => setPresentation(true)}>
@@ -975,7 +1092,7 @@ export function App() {
                   key={stop.id}
                   className={stop.id === selectedStopId ? "stop-card active" : "stop-card"}
                 >
-                  <button className="stop-main" onClick={() => setSelectedStopId(stop.id)} type="button">
+                  <button className="stop-main" onClick={() => selectStopId(stop.id)} type="button">
                     <strong>{stop.title}</strong>
                     <small>{stopSubtitle(stop)}</small>
                     {branchParentTitle(stop) ? (
@@ -1010,18 +1127,6 @@ export function App() {
               ))}
             </div>
 
-            <div className="media-grid">
-              {detail.media.map((item) => (
-                <figure key={item.id}>
-                  {item.kind === "video" ? (
-                    <video src={item.optimizedUrl ?? item.originalUrl ?? undefined} controls />
-                  ) : (
-                    <img src={item.thumbnailUrl ?? item.optimizedUrl ?? item.originalUrl ?? undefined} alt={item.file_name} />
-                  )}
-                  <figcaption>{item.processing_status}</figcaption>
-                </figure>
-              ))}
-            </div>
           </>
         ) : (
           <div className="empty-panel">
@@ -1036,19 +1141,38 @@ export function App() {
           <div className="presentation-inner" onClick={(event) => event.stopPropagation()}>
             <button className="icon-button close" onClick={() => setPresentation(false)}>×</button>
             <h2>{detail.trip.title}</h2>
-            <div className="presentation-media">
-              {detail.media.length ? (
-                detail.media.map((item) =>
-                  item.kind === "video" ? (
-                    <video key={item.id} src={item.optimizedUrl ?? item.originalUrl ?? undefined} controls />
-                  ) : (
-                    <img key={item.id} src={item.optimizedUrl ?? item.originalUrl ?? undefined} alt={item.file_name} />
-                  )
-                )
-              ) : (
-                <p>Add photos or videos to turn this trip into a presentation.</p>
-              )}
-            </div>
+            {presentationGroups.length ? (
+              <div className="presentation-story">
+                {presentationGroups.map((group) => (
+                  <section className="presentation-stop" key={group.id}>
+                    <div>
+                      <p className="eyebrow">{group.subtitle}</p>
+                      <h3>{group.title}</h3>
+                    </div>
+                    {group.notes.length ? (
+                      <div className="presentation-notes">
+                        {group.notes.map((note) => (
+                          <p key={note.id}>{note.body}</p>
+                        ))}
+                      </div>
+                    ) : null}
+                    {group.media.length ? (
+                      <div className="presentation-media">
+                        {group.media.map((item) =>
+                          item.kind === "video" ? (
+                            <video key={item.id} src={mediaUrl(item)} controls />
+                          ) : (
+                            <img key={item.id} src={mediaUrl(item)} alt={item.file_name} />
+                          )
+                        )}
+                      </div>
+                    ) : null}
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <p>Add notes, photos, or videos to turn this trip into a presentation.</p>
+            )}
           </div>
         </div>
       ) : null}

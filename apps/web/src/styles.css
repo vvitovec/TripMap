@@ -572,6 +572,7 @@ textarea {
   display: none;
 }
 
+.memory-panel,
 .note-panel {
   display: grid;
   gap: 10px;
@@ -581,9 +582,39 @@ textarea {
   padding: 14px;
 }
 
+.memory-panel h3,
 .note-panel h3 {
   margin: 0;
   font-size: 18px;
+}
+
+.memory-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.memory-tab {
+  min-height: 38px;
+  border: 1px solid #d6dde5;
+  border-radius: 8px;
+  background: #f8faf8;
+  color: #35536d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.memory-tab.active {
+  border-color: #f97316;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.memory-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .note-list {
@@ -753,6 +784,34 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 14px;
+}
+
+.presentation-story {
+  display: grid;
+  gap: 18px;
+}
+
+.presentation-stop {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  padding-top: 18px;
+}
+
+.presentation-stop h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.presentation-notes {
+  display: grid;
+  gap: 8px;
+}
+
+.presentation-notes p {
+  margin: 0;
+  color: #dbe4ee;
+  line-height: 1.45;
 }
 
 .presentation-media img,
