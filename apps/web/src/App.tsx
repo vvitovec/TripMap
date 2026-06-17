@@ -73,7 +73,11 @@ const placeChipGroups = [
       { label: "Beaches", query: "beach", hint: "Coast" },
       { label: "Monuments", query: "monument", hint: "Icons" },
       { label: "Castles", query: "castle", hint: "Historic" },
-      { label: "Trails", query: "trail", hint: "Walks" }
+      { label: "Trails", query: "trail", hint: "Walks" },
+      { label: "Waterfalls", query: "waterfall", hint: "Nature" },
+      { label: "Theme parks", query: "theme park", hint: "Fun" },
+      { label: "Zoos", query: "zoo", hint: "Animals" },
+      { label: "Aquariums", query: "aquarium", hint: "Marine" }
     ]
   },
   {
@@ -543,8 +547,8 @@ export function App() {
           ? ["fuel", "parking", "restaurant", "landmark", "hotel", "viewpoint"]
           : ["hotel", "fuel", "parking", "landmark", "restaurant", "viewpoint"]
         : mainStops.length
-          ? ["landmark", "restaurant", "cafe", "park", "museum", "viewpoint"]
-          : ["hotel", "landmark", "restaurant", "viewpoint", "park", "beach"];
+          ? ["landmark", "restaurant", "cafe", "park", "waterfall", "theme park"]
+          : ["hotel", "landmark", "restaurant", "viewpoint", "park", "waterfall"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, mainStops.length, routeQueue.length]);
   const draftExploreChips = useMemo(() => {

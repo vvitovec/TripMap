@@ -189,6 +189,16 @@ const nearbyCategoryQueries = new Map([
   ["castles", "castle"],
   ["ruin", "ruins"],
   ["ruins", "ruins"],
+  ["waterfall", "waterfall"],
+  ["waterfalls", "waterfall"],
+  ["theme park", "theme park"],
+  ["theme parks", "theme park"],
+  ["amusement park", "theme park"],
+  ["amusement parks", "theme park"],
+  ["zoo", "zoo"],
+  ["zoos", "zoo"],
+  ["aquarium", "aquarium"],
+  ["aquariums", "aquarium"],
   ["trail", "trail"],
   ["trails", "trail"],
   ["hike", "trail"],
@@ -247,6 +257,16 @@ const overpassCategoryTags = new Map<string, OverpassTagFilter[]>([
   ["monument", [{ key: "historic", values: ["monument", "memorial"] }]],
   ["castle", [{ key: "historic", values: ["castle"] }]],
   ["ruins", [{ key: "historic", values: ["ruins", "archaeological_site"] }]],
+  [
+    "waterfall",
+    [
+      { key: "waterway", values: ["waterfall"] },
+      { key: "natural", values: ["waterfall"] }
+    ]
+  ],
+  ["theme park", [{ key: "tourism", values: ["theme_park"] }]],
+  ["zoo", [{ key: "tourism", values: ["zoo"] }]],
+  ["aquarium", [{ key: "tourism", values: ["aquarium"] }]],
   [
     "trail",
     [
