@@ -454,7 +454,8 @@ export function App() {
       : mapFocus
         ? "map center"
         : "the map";
-  const routeSearchAnchor = routeQueue[routeQueue.length - 1]?.place;
+  const lastQueuedItem = routeQueue[routeQueue.length - 1] ?? null;
+  const routeSearchAnchor = lastQueuedItem?.place;
   const searchAnchor =
     searchOrigin === "draft" && placeDraft
       ? placeDraft
@@ -2569,6 +2570,26 @@ export function App() {
                     <span><Route size={14} /> {queuedRouteKm ? formatDistance(queuedRouteKm) : "Distance starts at first queued stop"}</span>
                     <span><MapPin size={14} /> {destinationPlacementLabel()}</span>
                     <span><ListFilter size={14} /> {routeQueue.length} queued</span>
+                  </div>
+                  <div className="route-queue-next">
+                    <span>
+                      <strong>Keep planning from {routeSearchAnchor?.name ?? "the route end"}</strong>
+                      <small>Searches will use the last queued destination as the next anchor.</small>
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSearchOrigin("route");
+                        setDestinationMode("search");
+                        setPlaceDraft(null);
+                        setPlaceQuery("");
+                      }}
+                      type="button"
+                    >
+                      <Search size={14} /> Search there
+                    </button>
+                    <button onClick={() => lastQueuedItem && exploreQueuedPlace(lastQueuedItem)} type="button">
+                      <Compass size={14} /> Explore
+                    </button>
                   </div>
                   <div className="route-queue-list">
                     {routeQueue.map((item, index) => (

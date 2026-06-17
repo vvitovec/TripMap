@@ -1121,6 +1121,58 @@ textarea {
   font-weight: 700;
 }
 
+.route-queue-next {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #f4e4d2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.route-queue-next span,
+.route-queue-next strong,
+.route-queue-next small {
+  display: block;
+  min-width: 0;
+}
+
+.route-queue-next strong,
+.route-queue-next small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-queue-next strong {
+  color: #7c2d12;
+  font-size: 13px;
+}
+
+.route-queue-next small {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.route-queue-next button {
+  min-height: 32px;
+  border: 1px solid #f4e4d2;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 9px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .route-queue-list {
   display: grid;
   gap: 7px;
@@ -1955,6 +2007,10 @@ textarea {
   }
 
   .route-queue-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .route-queue-next {
     grid-template-columns: 1fr;
   }
 
