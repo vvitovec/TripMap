@@ -405,6 +405,7 @@ export function App() {
         : rankedPlaceResults.filter((place) => placeKindLabel(place) === placeResultFilter),
     [placeResultFilter, rankedPlaceResults]
   );
+  const topVisiblePlace = visiblePlaceResults[0] ?? null;
   const draftTimeError = timeRangeError(draftArrivedAt, draftDepartedAt);
   const stopTimeError = timeRangeError(stopArrivedAtDraft, stopDepartedAtDraft);
   const queuedTimeErrors = useMemo(() => {
@@ -1870,10 +1871,31 @@ export function App() {
               {rankedPlaceResults.length > 0 && destinationMode !== "coordinates" ? (
                 <div className="place-results">
                   <div className="place-results-summary">
-                    <strong>
-                      {visiblePlaceResults.length} of {rankedPlaceResults.length} result{rankedPlaceResults.length === 1 ? "" : "s"}
-                    </strong>
-                    <small>Nearest first near {searchAnchorLabel}</small>
+                    <div>
+                      <strong>
+                        {visiblePlaceResults.length} of {rankedPlaceResults.length} result{rankedPlaceResults.length === 1 ? "" : "s"}
+                      </strong>
+                      <small>Nearest first near {searchAnchorLabel}</small>
+                    </div>
+                    {topVisiblePlace ? (
+                      <div className="place-summary-actions">
+                        <button
+                          onClick={() => addPlaceToRoute(topVisiblePlace, topVisiblePlace.name, "")}
+                          disabled={busy}
+                          type="button"
+                        >
+                          <Plus size={13} /> Add top
+                        </button>
+                        <button
+                          onClick={() => queuePlace(topVisiblePlace)}
+                          disabled={busy || queuedPlaceIds.has(topVisiblePlace.id)}
+                          type="button"
+                        >
+                          {queuedPlaceIds.has(topVisiblePlace.id) ? <Check size={13} /> : <ListFilter size={13} />}
+                          {queuedPlaceIds.has(topVisiblePlace.id) ? "Queued" : "Queue top"}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   {placeResultFilters.length > 1 ? (
                     <div className="place-result-filters">
