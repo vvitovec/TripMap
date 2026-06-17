@@ -153,8 +153,11 @@ function viewbox(lat: number, lng: number) {
 const nearbyCategoryQueries = new Map([
   ["hotel", "hotel"],
   ["hotels", "hotel"],
+  ["stay", "hotel"],
+  ["stays", "hotel"],
   ["lodging", "hotel"],
   ["accommodation", "hotel"],
+  ["accommodations", "hotel"],
   ["resort", "resort"],
   ["resorts", "resort"],
   ["hostel", "hostel"],
@@ -172,6 +175,9 @@ const nearbyCategoryQueries = new Map([
   ["campgrounds", "camp site"],
   ["landmark", "tourist attraction"],
   ["landmarks", "tourist attraction"],
+  ["tourist attraction", "tourist attraction"],
+  ["tourist attractions", "tourist attraction"],
+  ["things to do", "tourist attraction"],
   ["attraction", "tourist attraction"],
   ["attractions", "tourist attraction"],
   ["sight", "tourist attraction"],
@@ -189,6 +195,9 @@ const nearbyCategoryQueries = new Map([
   ["hiking", "trail"],
   ["restaurant", "restaurant"],
   ["restaurants", "restaurant"],
+  ["food", "restaurant"],
+  ["eat", "restaurant"],
+  ["eats", "restaurant"],
   ["cafe", "cafe"],
   ["cafes", "cafe"],
   ["coffee", "cafe"],
@@ -261,8 +270,49 @@ const overpassCategoryTags = new Map<string, OverpassTagFilter[]>([
   ["atm", [{ key: "amenity", values: ["atm"] }]]
 ]);
 
-function normalizePlaceQuery(query: string) {
-  return nearbyCategoryQueries.get(query.trim().toLowerCase()) ?? query.trim();
+const categoryIntentStopWords = new Set([
+  "a",
+  "an",
+  "around",
+  "best",
+  "current",
+  "find",
+  "for",
+  "good",
+  "here",
+  "ideas",
+  "me",
+  "my",
+  "near",
+  "nearby",
+  "open",
+  "place",
+  "places",
+  "search",
+  "show",
+  "the",
+  "top"
+]);
+
+function queryTokens(query: string) {
+  return query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function nearbyCategoryIntent(query: string) {
+  const directQuery = query.trim().toLowerCase();
+  const directMatch = nearbyCategoryQueries.get(directQuery);
+  if (directMatch) return directMatch;
+
+  const meaningfulQuery = queryTokens(query)
+    .filter((token) => !categoryIntentStopWords.has(token))
+    .join(" ");
+  if (!meaningfulQuery) return null;
+
+  return nearbyCategoryQueries.get(meaningfulQuery) ?? null;
 }
 
 function parseCoordinateQuery(query: string) {
@@ -421,9 +471,10 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     return places;
   }
 
-  const normalizedQuery = normalizePlaceQuery(input.q);
+  const categoryIntent = nearbyCategoryIntent(input.q);
+  const normalizedQuery = categoryIntent ?? input.q.trim();
   const hasAnchor = input.lat !== undefined && input.lng !== undefined;
-  const isNearbyCategory = nearbyCategoryQueries.has(input.q.trim().toLowerCase());
+  const isNearbyCategory = Boolean(categoryIntent);
 
   async function fetchSearch(bounded: boolean) {
     await waitForNominatimSlot();
