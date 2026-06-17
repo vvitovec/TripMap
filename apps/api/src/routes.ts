@@ -116,6 +116,33 @@ function viewbox(lat: number, lng: number) {
   return `${lng - delta},${lat + delta},${lng + delta},${lat - delta}`;
 }
 
+const nearbyCategoryQueries = new Map([
+  ["hotel", "hotel"],
+  ["hotels", "hotel"],
+  ["resort", "resort"],
+  ["resorts", "resort"],
+  ["landmark", "tourist attraction"],
+  ["landmarks", "tourist attraction"],
+  ["attraction", "tourist attraction"],
+  ["attractions", "tourist attraction"],
+  ["restaurant", "restaurant"],
+  ["restaurants", "restaurant"],
+  ["viewpoint", "viewpoint"],
+  ["viewpoints", "viewpoint"],
+  ["park", "park"],
+  ["parks", "park"],
+  ["museum", "museum"],
+  ["museums", "museum"],
+  ["fuel", "fuel"],
+  ["gas", "fuel"],
+  ["beach", "beach"],
+  ["beaches", "beach"]
+]);
+
+function normalizePlaceQuery(query: string) {
+  return nearbyCategoryQueries.get(query.trim().toLowerCase()) ?? query.trim();
+}
+
 async function waitForNominatimSlot() {
   const elapsed = Date.now() - lastNominatimSearchAt;
   const waitMs = Math.max(0, 1100 - elapsed);
@@ -128,31 +155,41 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   const cached = placeSearchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.places;
 
-  await waitForNominatimSlot();
-  const params = new URLSearchParams({
-    q: input.q,
-    format: "jsonv2",
-    addressdetails: "1",
-    namedetails: "1",
-    extratags: "1",
-    limit: "8",
-    "accept-language": "en"
-  });
-  if (input.lat !== undefined && input.lng !== undefined) {
-    params.set("viewbox", viewbox(input.lat, input.lng));
-    params.set("bounded", "0");
+  const normalizedQuery = normalizePlaceQuery(input.q);
+  const hasAnchor = input.lat !== undefined && input.lng !== undefined;
+  const isNearbyCategory = nearbyCategoryQueries.has(input.q.trim().toLowerCase());
+
+  async function fetchSearch(bounded: boolean) {
+    await waitForNominatimSlot();
+    const params = new URLSearchParams({
+      q: normalizedQuery,
+      format: "jsonv2",
+      addressdetails: "1",
+      namedetails: "1",
+      extratags: "1",
+      limit: "8",
+      "accept-language": "en"
+    });
+    if (hasAnchor) {
+      params.set("viewbox", viewbox(input.lat!, input.lng!));
+      params.set("bounded", bounded ? "1" : "0");
+    }
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+      headers: {
+        "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
+        Referer: "https://trip.vvitovec.com"
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Place search failed with status ${response.status}`);
+    }
+    return (await response.json()) as PlaceResult[];
   }
 
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-    headers: {
-      "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
-      Referer: "https://trip.vvitovec.com"
-    }
-  });
-  if (!response.ok) {
-    throw new Error(`Place search failed with status ${response.status}`);
+  let data = await fetchSearch(hasAnchor && isNearbyCategory);
+  if (!data.length && hasAnchor && isNearbyCategory) {
+    data = await fetchSearch(false);
   }
-  const data = (await response.json()) as PlaceResult[];
   const places = data
     .map((result) => ({
       id: `${result.osm_type ?? "place"}-${result.osm_id ?? result.place_id}`,

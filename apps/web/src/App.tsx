@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Compass,
   Crosshair,
   FolderPlus,
   GitBranch,
@@ -30,18 +31,20 @@ import type { Collaborator, Folder, MediaItem, Note, PlaceSearchResult, Stop, Tr
 
 type AuthMode = "login" | "register";
 type DestinationScope = "main" | "branch";
+type DestinationMode = "search" | "nearby" | "coordinates";
 type MemoryScope = "active" | "all";
 type ShareStatus = "idle" | "copied";
 
 const placeChips = [
-  { label: "Hotels", query: "hotel" },
-  { label: "Resorts", query: "resort" },
-  { label: "Landmarks", query: "landmark" },
-  { label: "Restaurants", query: "restaurant" },
-  { label: "Viewpoints", query: "viewpoint" },
-  { label: "Parks", query: "park" },
-  { label: "Museums", query: "museum" },
-  { label: "Fuel", query: "fuel" }
+  { label: "Hotels", query: "hotel", hint: "Stays" },
+  { label: "Resorts", query: "resort", hint: "Stays" },
+  { label: "Landmarks", query: "landmark", hint: "Sights" },
+  { label: "Restaurants", query: "restaurant", hint: "Food" },
+  { label: "Viewpoints", query: "viewpoint", hint: "Views" },
+  { label: "Parks", query: "park", hint: "Outdoors" },
+  { label: "Museums", query: "museum", hint: "Culture" },
+  { label: "Fuel", query: "fuel", hint: "Road trip" },
+  { label: "Beaches", query: "beach", hint: "Outdoors" }
 ];
 
 function mediaUrl(item: MediaItem) {
@@ -88,7 +91,11 @@ export function App() {
   const [placeDraft, setPlaceDraft] = useState<PlaceSearchResult | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
+  const [destinationMode, setDestinationMode] = useState<DestinationMode>("search");
   const [destinationScope, setDestinationScope] = useState<DestinationScope>("main");
+  const [manualLat, setManualLat] = useState("");
+  const [manualLng, setManualLng] = useState("");
+  const [manualLabel, setManualLabel] = useState("");
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<"all" | "unfiled" | string>("all");
@@ -259,6 +266,10 @@ export function App() {
     : detail?.stops.length
       ? detail.trip.title
       : "the map";
+  const rankedPlaceResults = useMemo(() => {
+    if (!searchAnchor) return placeResults;
+    return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
+  }, [placeResults, searchAnchor]);
   const routeInsertionAnchor = useMemo(() => {
     if (!activeStop) return null;
     if (!activeStop.branch_of) return activeStop;
@@ -380,6 +391,16 @@ export function App() {
     };
   }, [placeQuery, searchAnchor, selectedTripId, user]);
 
+  function resetDestinationDraft() {
+    setPlaceDraft(null);
+    setDraftTitle("");
+    setDraftNote("");
+    setDestinationScope("main");
+    setManualLat("");
+    setManualLng("");
+    setManualLabel("");
+  }
+
   async function handleAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -410,11 +431,8 @@ export function App() {
 
   function selectTripId(id: string) {
     setSelectedTripId(id);
-    setPlaceDraft(null);
     setPlaceQuery("");
-    setDraftTitle("");
-    setDraftNote("");
-    setDestinationScope("main");
+    resetDestinationDraft();
   }
 
   function selectStopId(id: string | null) {
@@ -436,7 +454,7 @@ export function App() {
       });
       setSelectedTripId(trip.id);
       setShowCreateTrip(false);
-      setPlaceDraft(null);
+      resetDestinationDraft();
       setPlaceQuery("");
       if (newTripFolderId) setSelectedFolderId(newTripFolderId);
       await load();
@@ -451,9 +469,39 @@ export function App() {
     setPlaceDraft(place);
     setDraftTitle(place.name);
     setDraftNote("");
+    setManualLat(String(Number(place.lat.toFixed(6))));
+    setManualLng(String(Number(place.lng.toFixed(6))));
+    setManualLabel(place.name);
     if (activeStop && currentTrip?.type === "one_destination") {
       setDestinationScope("branch");
     }
+  }
+
+  function searchNearbyCategory(query: string) {
+    setDestinationMode("nearby");
+    setPlaceQuery(query);
+    setPlaceDraft(null);
+  }
+
+  function useManualCoordinates() {
+    const lat = Number(manualLat);
+    const lng = Number(manualLng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setError("Enter valid latitude and longitude.");
+      return;
+    }
+    const label = manualLabel.trim() || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    setError(null);
+    selectPlace({
+      id: `manual-${lat}-${lng}`,
+      name: manualLabel.trim() || "Custom place",
+      label,
+      category: "coordinates",
+      type: "manual",
+      lat,
+      lng,
+      source: "map"
+    });
   }
 
   async function makeRoomForSortOrder(sortOrder: number) {
@@ -470,6 +518,7 @@ export function App() {
 
   async function previewMapPin(lat: number, lng: number) {
     if (!selectedTripId) return;
+    setDestinationMode("coordinates");
     setBusy(true);
     try {
       const { place } = await api.reversePlace(lat, lng);
@@ -518,10 +567,7 @@ export function App() {
       });
       setDetail(await api.trip(selectedTripId));
       selectStopId(stop.id);
-      setPlaceDraft(null);
-      setDraftTitle("");
-      setDraftNote("");
-      setDestinationScope("main");
+      resetDestinationDraft();
       await load();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
@@ -1150,34 +1196,107 @@ export function App() {
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">Add destination</p>
-                  <h3>Find a place</h3>
+                  <h3>{destinationMode === "nearby" ? "Nearby places" : destinationMode === "coordinates" ? "Exact pin" : "Find a place"}</h3>
                   <small className="anchor-label">Near {searchAnchorLabel}</small>
                 </div>
                 {searchingPlaces ? <Loader2 className="spin" size={18} /> : <Search size={18} />}
               </div>
-              <div className="search-input">
-                <Search size={17} />
-                <input
-                  value={placeQuery}
-                  onChange={(event) => setPlaceQuery(event.target.value)}
-                  placeholder="Address, hotel, resort, landmark"
-                />
-              </div>
-              <div className="quick-chips">
-                {placeChips.map((chip) => (
-                  <button
-                    key={chip.label}
-                    onClick={() => setPlaceQuery(chip.query)}
-                    type="button"
-                  >
-                    {chip.label}
-                  </button>
-                ))}
+
+              <div className="destination-mode-tabs">
+                <button
+                  className={destinationMode === "search" ? "destination-mode active" : "destination-mode"}
+                  onClick={() => setDestinationMode("search")}
+                  type="button"
+                >
+                  <Search size={15} /> Search
+                </button>
+                <button
+                  className={destinationMode === "nearby" ? "destination-mode active" : "destination-mode"}
+                  onClick={() => setDestinationMode("nearby")}
+                  type="button"
+                >
+                  <Compass size={15} /> Nearby
+                </button>
+                <button
+                  className={destinationMode === "coordinates" ? "destination-mode active" : "destination-mode"}
+                  onClick={() => setDestinationMode("coordinates")}
+                  type="button"
+                >
+                  <Crosshair size={15} /> Pin
+                </button>
               </div>
 
-              {placeResults.length ? (
+              {destinationMode !== "coordinates" ? (
+                <>
+                  <div className="search-input">
+                    <Search size={17} />
+                    <input
+                      value={placeQuery}
+                      onChange={(event) => {
+                        setDestinationMode("search");
+                        setPlaceQuery(event.target.value);
+                      }}
+                      placeholder="Address, hotel, resort, landmark"
+                    />
+                  </div>
+                  {destinationMode === "nearby" ? (
+                    <div className="nearby-grid">
+                      {placeChips.map((chip) => (
+                        <button
+                          key={chip.label}
+                          className={placeQuery === chip.query ? "nearby-card active" : "nearby-card"}
+                          onClick={() => searchNearbyCategory(chip.query)}
+                          type="button"
+                        >
+                          <span>{chip.label}</span>
+                          <small>{chip.hint}</small>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="quick-chips">
+                      {placeChips.slice(0, 6).map((chip) => (
+                        <button
+                          key={chip.label}
+                          onClick={() => searchNearbyCategory(chip.query)}
+                          type="button"
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="coordinate-entry">
+                  <input
+                    value={manualLabel}
+                    onChange={(event) => setManualLabel(event.target.value)}
+                    placeholder="Place name"
+                  />
+                  <div className="coordinate-row">
+                    <input
+                      value={manualLat}
+                      onChange={(event) => setManualLat(event.target.value)}
+                      inputMode="decimal"
+                      placeholder="Latitude"
+                    />
+                    <input
+                      value={manualLng}
+                      onChange={(event) => setManualLng(event.target.value)}
+                      inputMode="decimal"
+                      placeholder="Longitude"
+                    />
+                  </div>
+                  <button className="wide-button subtle" onClick={useManualCoordinates} type="button">
+                    <Crosshair size={16} /> Use coordinates
+                  </button>
+                </div>
+              )}
+
+              {rankedPlaceResults.length > 0 && destinationMode !== "coordinates" ? (
                 <div className="place-results">
-                  {placeResults.map((place) => (
+                  {rankedPlaceResults.map((place) => (
                     <button
                       key={place.id}
                       className={placeDraft?.id === place.id ? "place-result active" : "place-result"}
@@ -1196,7 +1315,7 @@ export function App() {
                     </button>
                   ))}
                 </div>
-              ) : placeQuery.trim().length >= 3 && !searchingPlaces ? (
+              ) : destinationMode !== "coordinates" && placeQuery.trim().length >= 3 && !searchingPlaces ? (
                 <p className="muted">No places found.</p>
               ) : null}
 
@@ -1245,10 +1364,7 @@ export function App() {
                     <button
                       className="icon-button"
                       onClick={() => {
-                        setPlaceDraft(null);
-                        setDraftTitle("");
-                        setDraftNote("");
-                        setDestinationScope("main");
+                        resetDestinationDraft();
                       }}
                       title="Clear draft"
                       type="button"
