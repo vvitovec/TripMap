@@ -3,9 +3,14 @@ import type { Collaborator, Folder, PlaceSearchResult, Stop, Trip, TripDetail, U
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers =
+    init?.body === undefined || init.body instanceof FormData
+      ? init?.headers
+      : { "Content-Type": "application/json", ...init?.headers };
+
   const response = await fetch(`${apiBase}${path}`, {
     credentials: "include",
-    headers: init?.body instanceof FormData ? undefined : { "Content-Type": "application/json" },
+    headers,
     ...init
   });
   if (!response.ok) {
