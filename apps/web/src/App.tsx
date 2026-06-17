@@ -2,6 +2,7 @@ import {
   Camera,
   Check,
   Crosshair,
+  FileText,
   FolderPlus,
   Image,
   Loader2,
@@ -11,12 +12,13 @@ import {
   Search,
   Route,
   Share2,
+  X,
   Upload
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { TripMap } from "./TripMap";
-import type { Folder, PlaceSearchResult, Trip, TripDetail, User } from "./types";
+import type { Folder, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
 
 type AuthMode = "login" | "register";
 
@@ -39,6 +41,13 @@ export function App() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [searchingPlaces, setSearchingPlaces] = useState(false);
+  const [showCreateTrip, setShowCreateTrip] = useState(false);
+  const [newTripType, setNewTripType] = useState<Trip["type"]>("one_destination");
+  const [newTripTitle, setNewTripTitle] = useState("");
+  const [newTripDescription, setNewTripDescription] = useState("");
+  const [newTripFolderId, setNewTripFolderId] = useState("");
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -70,11 +79,39 @@ export function App() {
     api.trip(selectedTripId).then(setDetail).catch((error) => setError(error.message));
   }, [selectedTripId, user]);
 
+  useEffect(() => {
+    if (!detail?.stops.length) {
+      setSelectedStopId(null);
+      return;
+    }
+    if (!selectedStopId || !detail.stops.some((stop) => stop.id === selectedStopId)) {
+      setSelectedStopId(detail.stops[0]!.id);
+    }
+  }, [detail, selectedStopId]);
+
   const mediaCount = detail?.media.length ?? 0;
   const currentTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
     [selectedTripId, trips]
   );
+  const activeStop = useMemo(
+    () => detail?.stops.find((stop) => stop.id === selectedStopId) ?? null,
+    [detail?.stops, selectedStopId]
+  );
+  const stopMediaCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    detail?.media.forEach((item) => {
+      if (item.stop_id) counts.set(item.stop_id, (counts.get(item.stop_id) ?? 0) + 1);
+    });
+    return counts;
+  }, [detail?.media]);
+  const stopNoteCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    detail?.notes.forEach((note) => {
+      if (note.stop_id) counts.set(note.stop_id, (counts.get(note.stop_id) ?? 0) + 1);
+    });
+    return counts;
+  }, [detail?.notes]);
   const tripCenter = useMemo(() => {
     const stops = detail?.stops ?? currentTrip?.stops ?? [];
     if (!stops.length) return undefined;
@@ -132,16 +169,30 @@ export function App() {
     }
   }
 
-  async function quickCreateTrip(type: Trip["type"]) {
+  function openCreateTrip(type: Trip["type"]) {
+    setNewTripType(type);
+    setNewTripTitle(type === "road_trip" ? "Summer road trip" : "Beach weekend");
+    setNewTripDescription("");
+    setNewTripFolderId("");
+    setShowCreateTrip(true);
+  }
+
+  async function createTrip(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setBusy(true);
     try {
-      const title = type === "road_trip" ? "New road trip" : "New destination";
       const { trip } = await api.createTrip({
-        title,
-        description: "Start adding stops, notes, photos, and short videos.",
-        type
+        title: newTripTitle.trim(),
+        description:
+          newTripDescription.trim() ||
+          "Add destinations, notes, photos, and short videos as the trip unfolds.",
+        type: newTripType,
+        folderId: newTripFolderId || null
       });
       setSelectedTripId(trip.id);
+      setShowCreateTrip(false);
+      setPlaceDraft(null);
+      setPlaceQuery("");
       await load();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
@@ -177,7 +228,7 @@ export function App() {
     setError(null);
     const sortOrder = detail?.stops.length ?? currentTrip?.stops.length ?? 0;
     try {
-      await api.addStop(selectedTripId, {
+      const { stop } = await api.addStop(selectedTripId, {
         title: draftTitle.trim() || placeDraft.name || `Stop ${sortOrder + 1}`,
         note: draftNote.trim(),
         lat: placeDraft.lat,
@@ -185,6 +236,7 @@ export function App() {
         sortOrder
       });
       setDetail(await api.trip(selectedTripId));
+      setSelectedStopId(stop.id);
       setPlaceDraft(null);
       setDraftTitle("");
       setDraftNote("");
@@ -200,13 +252,36 @@ export function App() {
     if (!files || !selectedTripId) return;
     setBusy(true);
     try {
-      await api.upload(selectedTripId, files);
+      await api.upload(selectedTripId, files, selectedStopId);
       setDetail(await api.trip(selectedTripId));
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function addNote() {
+    if (!selectedTripId || !noteDraft.trim()) return;
+    setBusy(true);
+    try {
+      await api.addNote(selectedTripId, noteDraft.trim(), selectedStopId);
+      setNoteDraft("");
+      setDetail(await api.trip(selectedTripId));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function stopSubtitle(stop: Stop) {
+    const media = stopMediaCounts.get(stop.id) ?? 0;
+    const notes = stopNoteCounts.get(stop.id) ?? 0;
+    const bits = [`${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}`];
+    if (media) bits.push(`${media} media`);
+    if (notes) bits.push(`${notes} notes`);
+    return bits.join(" · ");
   }
 
   if (shareToken) {
@@ -287,13 +362,50 @@ export function App() {
         </div>
 
         <div className="action-row">
-          <button onClick={() => quickCreateTrip("one_destination")} disabled={busy}>
+          <button onClick={() => openCreateTrip("one_destination")} disabled={busy}>
             <Plus size={16} /> Destination
           </button>
-          <button onClick={() => quickCreateTrip("road_trip")} disabled={busy}>
+          <button onClick={() => openCreateTrip("road_trip")} disabled={busy}>
             <Route size={16} /> Road trip
           </button>
         </div>
+
+        {showCreateTrip ? (
+          <form className="create-trip-panel" onSubmit={createTrip}>
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">New trip</p>
+                <h3>{newTripType === "road_trip" ? "Road trip" : "One destination"}</h3>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowCreateTrip(false)} title="Close">
+                <X size={17} />
+              </button>
+            </div>
+            <input
+              value={newTripTitle}
+              onChange={(event) => setNewTripTitle(event.target.value)}
+              placeholder="Trip name"
+              required
+            />
+            <textarea
+              value={newTripDescription}
+              onChange={(event) => setNewTripDescription(event.target.value)}
+              placeholder="Short description"
+              rows={3}
+            />
+            <select value={newTripFolderId} onChange={(event) => setNewTripFolderId(event.target.value)}>
+              <option value="">No folder</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.title}
+                </option>
+              ))}
+            </select>
+            <button className="wide-button" disabled={busy || !newTripTitle.trim()}>
+              <Check size={16} /> Create trip
+            </button>
+          </form>
+        ) : null}
 
         <section className="folder-strip">
           <button
@@ -333,8 +445,10 @@ export function App() {
         <TripMap
           trips={trips}
           selectedTripId={selectedTripId}
+          selectedStopId={selectedStopId}
           previewPlace={placeDraft}
           onSelectTrip={setSelectedTripId}
+          onSelectStop={setSelectedStopId}
           onMapClick={previewMapPin}
         />
       </section>
@@ -352,6 +466,20 @@ export function App() {
               <span><MapPin /> {detail.stops.length} stops</span>
               <span><Image /> {mediaCount} media</span>
             </div>
+
+            {activeStop ? (
+              <section className="active-context">
+                <p className="eyebrow">Active stop</p>
+                <strong>{activeStop.title}</strong>
+                <small>{stopSubtitle(activeStop)}</small>
+              </section>
+            ) : (
+              <section className="active-context muted-context">
+                <p className="eyebrow">Active stop</p>
+                <strong>Trip-level</strong>
+                <small>Add or select a destination to attach notes and media to a stop.</small>
+              </section>
+            )}
 
             <section className="place-workflow">
               <div className="panel-heading">
@@ -373,7 +501,9 @@ export function App() {
                 {["hotel", "resort", "landmark", "airport", "beach", "park"].map((label) => (
                   <button
                     key={label}
-                    onClick={() => setPlaceQuery(`${label} ${detail.trip.title}`)}
+                    onClick={() =>
+                      setPlaceQuery(activeStop ? `${label} near ${activeStop.title}` : `${label} ${detail.trip.title}`)
+                    }
                     type="button"
                   >
                     {label}
@@ -428,9 +558,38 @@ export function App() {
 
             <label className="upload-box">
               <Upload />
-              <span>Upload photos or videos</span>
+              <span>{activeStop ? `Upload to ${activeStop.title}` : "Upload photos or videos"}</span>
               <input type="file" accept="image/*,video/*" multiple onChange={(event) => upload(event.target.files)} />
             </label>
+
+            <section className="note-panel">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">Notes</p>
+                  <h3>{activeStop ? activeStop.title : detail.trip.title}</h3>
+                </div>
+                <FileText size={18} />
+              </div>
+              <textarea
+                value={noteDraft}
+                onChange={(event) => setNoteDraft(event.target.value)}
+                placeholder={activeStop ? "Add a note for this stop" : "Add a trip note"}
+                rows={3}
+              />
+              <button className="wide-button subtle" onClick={addNote} disabled={busy || !noteDraft.trim()}>
+                <Plus size={16} /> Add note
+              </button>
+              <div className="note-list">
+                {detail.notes
+                  .filter((note) => (selectedStopId ? note.stop_id === selectedStopId : !note.stop_id))
+                  .map((note) => (
+                    <article key={note.id}>
+                      <p>{note.body}</p>
+                      <small>{new Date(note.created_at).toLocaleDateString()}</small>
+                    </article>
+                  ))}
+              </div>
+            </section>
 
             <button className="wide-button" onClick={() => setPresentation(true)}>
               <Camera size={16} /> Open presentation
@@ -447,11 +606,15 @@ export function App() {
 
             <div className="timeline">
               {detail.stops.map((stop) => (
-                <article key={stop.id}>
+                <button
+                  key={stop.id}
+                  className={stop.id === selectedStopId ? "stop-card active" : "stop-card"}
+                  onClick={() => setSelectedStopId(stop.id)}
+                >
                   <strong>{stop.title}</strong>
-                  <small>{stop.lat.toFixed(4)}, {stop.lng.toFixed(4)}</small>
+                  <small>{stopSubtitle(stop)}</small>
                   {stop.note ? <p>{stop.note}</p> : null}
-                </article>
+                </button>
               ))}
             </div>
 

@@ -5,16 +5,20 @@ import type { PlaceSearchResult, Trip } from "./types";
 type Props = {
   trips: Trip[];
   selectedTripId: string | null;
+  selectedStopId?: string | null;
   previewPlace?: PlaceSearchResult | null;
   onSelectTrip: (id: string) => void;
+  onSelectStop?: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
 };
 
 export function TripMap({
   trips,
   selectedTripId,
+  selectedStopId,
   previewPlace,
   onSelectTrip,
+  onSelectStop,
   onMapClick
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -26,9 +30,11 @@ export function TripMap({
         type: "Feature" as const,
         properties: {
           tripId: trip.id,
+          stopId: stop.id,
           title: stop.title,
           tripTitle: trip.title,
-          selected: trip.id === selectedTripId
+          selected: trip.id === selectedTripId,
+          activeStop: stop.id === selectedStopId
         },
         geometry: {
           type: "Point" as const,
@@ -66,7 +72,7 @@ export function TripMap({
       type: "FeatureCollection" as const,
       features: [...lineFeatures, ...pointFeatures, ...(previewFeature ? [previewFeature] : [])]
     };
-  }, [previewPlace, selectedTripId, trips]);
+  }, [previewPlace, selectedStopId, selectedTripId, trips]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -112,11 +118,20 @@ export function TripMap({
         source: "trips",
         filter: ["==", "$type", "Point"],
         paint: {
-          "circle-radius": ["case", ["get", "selected"], 10, 7],
+          "circle-radius": [
+            "case",
+            ["get", "activeStop"],
+            12,
+            ["get", "selected"],
+            10,
+            7
+          ],
           "circle-color": [
             "case",
             ["get", "preview"],
             "#22c55e",
+            ["get", "activeStop"],
+            "#fde047",
             ["get", "selected"],
             "#f97316",
             "#f8fafc"
@@ -148,7 +163,9 @@ export function TripMap({
       const feature = event.features?.[0];
       if (feature?.properties?.preview) return;
       const tripId = feature?.properties?.tripId;
+      const stopId = feature?.properties?.stopId;
       if (tripId) onSelectTrip(tripId);
+      if (stopId && onSelectStop) onSelectStop(stopId);
     });
 
     map.on("click", (event) => {

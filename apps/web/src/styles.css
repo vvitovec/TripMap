@@ -192,6 +192,16 @@ textarea {
   margin: 18px 0;
 }
 
+.create-trip-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
 .folder-strip {
   display: flex;
   gap: 8px;
@@ -283,6 +293,29 @@ textarea {
   gap: 8px;
   padding: 0 10px;
   background: #fff;
+}
+
+.active-context {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.active-context strong,
+.active-context small {
+  display: block;
+}
+
+.active-context small {
+  color: #667085;
+  line-height: 1.35;
+}
+
+.muted-context {
+  background: #f8faf8;
 }
 
 .place-workflow {
@@ -428,6 +461,42 @@ textarea {
   display: none;
 }
 
+.note-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.note-panel h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.note-list {
+  display: grid;
+  gap: 8px;
+}
+
+.note-list article {
+  background: #f8faf8;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.note-list p {
+  margin: 0;
+}
+
+.note-list small {
+  display: block;
+  margin-top: 5px;
+  color: #667085;
+}
+
 .wide-button {
   width: 100%;
 }
@@ -443,17 +512,34 @@ textarea {
   gap: 8px;
 }
 
-.timeline article {
+.stop-card {
   border-left: 3px solid #f97316;
+  border-top: 1px solid #dbe3df;
+  border-right: 1px solid #dbe3df;
+  border-bottom: 1px solid #dbe3df;
   padding: 10px 12px;
   background: #fff;
   border-radius: 0 8px 8px 0;
+  text-align: left;
 }
 
-.timeline small {
+.stop-card.active {
+  border-left-color: #fde047;
+  background: #fffbeb;
+}
+
+.stop-card strong,
+.stop-card small {
   display: block;
+}
+
+.stop-card small {
   color: #667085;
   margin-top: 4px;
+}
+
+.stop-card p {
+  margin: 6px 0 0;
 }
 
 .media-grid {

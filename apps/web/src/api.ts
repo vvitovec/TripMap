@@ -1,4 +1,4 @@
-import type { Folder, PlaceSearchResult, Trip, TripDetail, User } from "./types";
+import type { Folder, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
 
@@ -45,6 +45,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input)
     }),
+  updateTrip: (
+    id: string,
+    input: {
+      title?: string;
+      description?: string;
+      folderId?: string | null;
+    }
+  ) =>
+    request<{ trip: Trip }>(`/trips/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   trip: (id: string) => request<TripDetail>(`/trips/${id}`),
   sharedTrip: (token: string) => request<TripDetail>(`/share/${token}`),
   searchPlaces: (query: string, near?: { lat: number; lng: number }) => {
@@ -59,7 +71,7 @@ export const api = {
     tripId: string,
     input: { title: string; note: string; lat: number; lng: number; sortOrder: number }
   ) =>
-    request(`/trips/${tripId}/stops`, {
+    request<{ stop: Stop }>(`/trips/${tripId}/stops`, {
       method: "POST",
       body: JSON.stringify(input)
     }),

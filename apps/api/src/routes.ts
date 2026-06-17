@@ -48,6 +48,16 @@ const tripSchema = z.object({
   endsAt: z.string().datetime().nullable().optional()
 });
 
+const tripUpdateSchema = tripSchema
+  .pick({
+    folderId: true,
+    title: true,
+    description: true,
+    startsAt: true,
+    endsAt: true
+  })
+  .partial();
+
 const stopSchema = z.object({
   title: z.string().min(1).max(140),
   note: z.string().max(2000).default(""),
@@ -364,6 +374,42 @@ export async function registerRoutes(app: FastifyInstance) {
       return;
     }
     return await tripPayload(id);
+  });
+
+  app.patch("/trips/:id", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id } = request.params as { id: string };
+    if (!(await canEditTrip(id, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    const input = tripUpdateSchema.parse(request.body);
+    const { rows } = await pool.query(
+      `UPDATE trips
+       SET folder_id = CASE WHEN $2 THEN $3 ELSE folder_id END,
+           title = CASE WHEN $4 THEN $5 ELSE title END,
+           description = CASE WHEN $6 THEN $7 ELSE description END,
+           starts_at = CASE WHEN $8 THEN $9 ELSE starts_at END,
+           ends_at = CASE WHEN $10 THEN $11 ELSE ends_at END,
+           updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [
+        id,
+        input.folderId !== undefined,
+        input.folderId ?? null,
+        input.title !== undefined,
+        input.title ?? null,
+        input.description !== undefined,
+        input.description ?? null,
+        input.startsAt !== undefined,
+        input.startsAt ?? null,
+        input.endsAt !== undefined,
+        input.endsAt ?? null
+      ]
+    );
+    return { trip: rows[0] };
   });
 
   app.post("/trips/:id/stops", async (request, reply) => {
