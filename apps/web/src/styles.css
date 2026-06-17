@@ -865,6 +865,11 @@ textarea {
   box-shadow: 0 10px 26px rgba(34, 197, 94, 0.12);
 }
 
+.place-result.saved {
+  border-color: #bbebc8;
+  background: #f8fff9;
+}
+
 .place-result-main {
   min-width: 0;
   border: 0;
@@ -894,6 +899,11 @@ textarea {
 }
 
 .place-result-queue.active {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.place-result.saved .place-result-add {
   background: #ecfdf3;
   color: #166534;
 }

@@ -201,6 +201,10 @@ function placeSourceLabel(place: PlaceSearchResult) {
   return null;
 }
 
+function normalizedPlaceName(value: string) {
+  return value.toLowerCase().replace(/\W+/g, "");
+}
+
 function toDateTimeInputValue(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -494,16 +498,17 @@ export function App() {
   }, [routeQueue]);
   const queuedPlaceIds = useMemo(() => new Set(routeQueue.map((item) => item.place.id)), [routeQueue]);
   const topQueueablePlaces = useMemo(
-    () => visiblePlaceResults.filter((place) => !queuedPlaceIds.has(place.id)).slice(0, 3),
-    [queuedPlaceIds, visiblePlaceResults]
+    () => visiblePlaceResults.filter((place) => !queuedPlaceIds.has(place.id) && !savedStopForPlace(place)).slice(0, 3),
+    [detail?.stops, queuedPlaceIds, visiblePlaceResults]
   );
+  const topVisibleSavedStop = topVisiblePlace ? savedStopForPlace(topVisiblePlace) : null;
   const activePreset = useMemo(
     () => destinationPresets.find((preset) => preset.id === activePresetId) ?? null,
     [activePresetId]
   );
   const activePresetQuery = activePreset?.steps[activePresetStep]?.query ?? null;
   const canAdvancePreset = Boolean(activePreset && activePresetStep < activePreset.steps.length - 1);
-  const canQueueTopForPreset = Boolean(topVisiblePlace && !queuedPlaceIds.has(topVisiblePlace.id));
+  const canQueueTopForPreset = Boolean(topVisiblePlace && !queuedPlaceIds.has(topVisiblePlace.id) && !topVisibleSavedStop);
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     routeQueue.forEach((item) => previews.set(item.place.id, item.place));
@@ -961,6 +966,13 @@ export function App() {
     departedAt = ""
   ) {
     if (!selectedTripId) return;
+    const savedStop = savedStopForPlace(place);
+    if (savedStop) {
+      selectStopId(savedStop.id);
+      resetDestinationDraft();
+      setError(null);
+      return;
+    }
     const timingError = timeRangeError(arrivedAt, departedAt);
     if (timingError) {
       setError(timingError);
@@ -998,6 +1010,12 @@ export function App() {
   }
 
   function queuePlace(place: PlaceSearchResult, title = place.name, note = "", arrivedAt = "", departedAt = "") {
+    const savedStop = savedStopForPlace(place);
+    if (savedStop) {
+      selectStopId(savedStop.id);
+      setError(null);
+      return;
+    }
     setRouteQueue((items) =>
       items.some((item) => item.place.id === place.id)
         ? items.map((item) =>
@@ -1365,6 +1383,17 @@ export function App() {
   function placeDistanceLabel(place: PlaceSearchResult) {
     if (!searchAnchor) return null;
     return `${formatDistance(distanceKm(searchAnchor, place))} away`;
+  }
+
+  function savedStopForPlace(place: PlaceSearchResult) {
+    const placeName = normalizedPlaceName(place.name);
+    return (
+      detail?.stops.find((stop) => {
+        const stopDistanceKm = distanceKm(stop, place);
+        if (stopDistanceKm <= 0.05) return true;
+        return placeName.length > 2 && normalizedPlaceName(stop.title) === placeName && stopDistanceKm <= 0.5;
+      }) ?? null
+    );
   }
 
   function placeAreaLabel(place: PlaceSearchResult) {
@@ -2174,19 +2203,24 @@ export function App() {
                     {topVisiblePlace ? (
                       <div className="place-summary-actions">
                         <button
-                          onClick={() => addPlaceToRoute(topVisiblePlace, topVisiblePlace.name, "")}
+                          onClick={() =>
+                            topVisibleSavedStop
+                              ? selectStopId(topVisibleSavedStop.id)
+                              : addPlaceToRoute(topVisiblePlace, topVisiblePlace.name, "")
+                          }
                           disabled={busy}
                           type="button"
                         >
-                          <Plus size={13} /> Add top
+                          {topVisibleSavedStop ? <Check size={13} /> : <Plus size={13} />}
+                          {topVisibleSavedStop ? "Open saved" : "Add top"}
                         </button>
                         <button
                           onClick={() => queuePlace(topVisiblePlace)}
-                          disabled={busy || queuedPlaceIds.has(topVisiblePlace.id)}
+                          disabled={busy || queuedPlaceIds.has(topVisiblePlace.id) || Boolean(topVisibleSavedStop)}
                           type="button"
                         >
-                          {queuedPlaceIds.has(topVisiblePlace.id) ? <Check size={13} /> : <ListFilter size={13} />}
-                          {queuedPlaceIds.has(topVisiblePlace.id) ? "Queued" : "Queue top"}
+                          {queuedPlaceIds.has(topVisiblePlace.id) || topVisibleSavedStop ? <Check size={13} /> : <ListFilter size={13} />}
+                          {topVisibleSavedStop ? "Saved" : queuedPlaceIds.has(topVisiblePlace.id) ? "Queued" : "Queue top"}
                         </button>
                         <button
                           onClick={queueTopVisiblePlaces}
@@ -2223,17 +2257,27 @@ export function App() {
                     const areaLabel = placeAreaLabel(place);
                     const distanceLabel = placeDistanceLabel(place);
                     const sourceLabel = placeSourceLabel(place);
+                    const savedStop = savedStopForPlace(place);
                     return (
                       <article
                         key={place.id}
-                        className={placeDraft?.id === place.id ? "place-result active" : "place-result"}
+                        className={[
+                          "place-result",
+                          placeDraft?.id === place.id ? "active" : "",
+                          savedStop ? "saved" : ""
+                        ].filter(Boolean).join(" ")}
                       >
-                        <button className="place-result-main" onClick={() => selectPlace(place)} type="button">
+                        <button
+                          className="place-result-main"
+                          onClick={() => (savedStop ? selectStopId(savedStop.id) : selectPlace(place))}
+                          type="button"
+                        >
                           <MapPin size={16} />
                           <span>
                             <strong>{place.name}</strong>
                             <span className="place-meta-row">
                               <span>{placeKindLabel(place)}</span>
+                              {savedStop ? <span>Saved as {savedStop.title}</span> : null}
                               {sourceLabel ? <span>{sourceLabel}</span> : null}
                               {distanceLabel ? <span>{distanceLabel}</span> : null}
                               {areaLabel ? <span>{areaLabel}</span> : null}
@@ -2243,20 +2287,21 @@ export function App() {
                         </button>
                         <button
                           className="place-result-add"
-                          onClick={() => addPlaceToRoute(place, place.name, "")}
+                          onClick={() => (savedStop ? selectStopId(savedStop.id) : addPlaceToRoute(place, place.name, ""))}
                           disabled={busy}
                           type="button"
                         >
-                          <Plus size={14} /> Add
+                          {savedStop ? <Check size={14} /> : <Plus size={14} />}
+                          {savedStop ? "Open" : "Add"}
                         </button>
                         <button
-                          className={queuedPlaceIds.has(place.id) ? "place-result-queue active" : "place-result-queue"}
+                          className={queuedPlaceIds.has(place.id) || savedStop ? "place-result-queue active" : "place-result-queue"}
                           onClick={() => queuePlace(place)}
-                          disabled={busy || queuedPlaceIds.has(place.id)}
+                          disabled={busy || queuedPlaceIds.has(place.id) || Boolean(savedStop)}
                           type="button"
                         >
-                          {queuedPlaceIds.has(place.id) ? <Check size={14} /> : <ListFilter size={14} />}
-                          {queuedPlaceIds.has(place.id) ? "Queued" : "Queue"}
+                          {queuedPlaceIds.has(place.id) || savedStop ? <Check size={14} /> : <ListFilter size={14} />}
+                          {savedStop ? "Saved" : queuedPlaceIds.has(place.id) ? "Queued" : "Queue"}
                         </button>
                       </article>
                     );
