@@ -36,17 +36,53 @@ type MemoryScope = "active" | "all";
 type SearchOrigin = "context" | "route" | "map";
 type ShareStatus = "idle" | "copied";
 
-const placeChips = [
-  { label: "Hotels", query: "hotel", hint: "Stays" },
-  { label: "Resorts", query: "resort", hint: "Stays" },
-  { label: "Landmarks", query: "landmark", hint: "Sights" },
-  { label: "Restaurants", query: "restaurant", hint: "Food" },
-  { label: "Viewpoints", query: "viewpoint", hint: "Views" },
-  { label: "Parks", query: "park", hint: "Outdoors" },
-  { label: "Museums", query: "museum", hint: "Culture" },
-  { label: "Fuel", query: "fuel", hint: "Road trip" },
-  { label: "Beaches", query: "beach", hint: "Outdoors" }
+const placeChipGroups = [
+  {
+    title: "Stay",
+    chips: [
+      { label: "Hotels", query: "hotel", hint: "Rooms" },
+      { label: "Resorts", query: "resort", hint: "Getaways" },
+      { label: "Campsites", query: "campsite", hint: "Outdoors" }
+    ]
+  },
+  {
+    title: "See",
+    chips: [
+      { label: "Landmarks", query: "landmark", hint: "Sights" },
+      { label: "Viewpoints", query: "viewpoint", hint: "Views" },
+      { label: "Museums", query: "museum", hint: "Culture" },
+      { label: "Parks", query: "park", hint: "Outdoors" },
+      { label: "Beaches", query: "beach", hint: "Coast" }
+    ]
+  },
+  {
+    title: "Food",
+    chips: [
+      { label: "Restaurants", query: "restaurant", hint: "Meals" },
+      { label: "Cafes", query: "cafe", hint: "Breaks" },
+      { label: "Bars", query: "bar", hint: "Evening" }
+    ]
+  },
+  {
+    title: "Move",
+    chips: [
+      { label: "Fuel", query: "fuel", hint: "Road trip" },
+      { label: "Parking", query: "parking", hint: "Arrivals" },
+      { label: "Airports", query: "airport", hint: "Flights" },
+      { label: "Stations", query: "train station", hint: "Transit" }
+    ]
+  },
+  {
+    title: "Essentials",
+    chips: [
+      { label: "Groceries", query: "grocery", hint: "Supplies" },
+      { label: "Pharmacies", query: "pharmacy", hint: "Health" },
+      { label: "ATMs", query: "atm", hint: "Cash" }
+    ]
+  }
 ];
+
+const placeChips = placeChipGroups.flatMap((group) => group.chips);
 
 function mediaUrl(item: MediaItem) {
   return item.optimizedUrl ?? item.originalUrl ?? undefined;
@@ -1540,17 +1576,24 @@ export function App() {
                     />
                   </div>
                   {destinationMode === "nearby" ? (
-                    <div className="nearby-grid">
-                      {placeChips.map((chip) => (
-                        <button
-                          key={chip.label}
-                          className={placeQuery === chip.query ? "nearby-card active" : "nearby-card"}
-                          onClick={() => searchNearbyCategory(chip.query)}
-                          type="button"
-                        >
-                          <span>{chip.label}</span>
-                          <small>{chip.hint}</small>
-                        </button>
+                    <div className="nearby-groups">
+                      {placeChipGroups.map((group) => (
+                        <section className="nearby-section" key={group.title}>
+                          <small>{group.title}</small>
+                          <div className="nearby-grid">
+                            {group.chips.map((chip) => (
+                              <button
+                                key={chip.label}
+                                className={placeQuery === chip.query ? "nearby-card active" : "nearby-card"}
+                                onClick={() => searchNearbyCategory(chip.query)}
+                                type="button"
+                              >
+                                <span>{chip.label}</span>
+                                <small>{chip.hint}</small>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
                       ))}
                     </div>
                   ) : (

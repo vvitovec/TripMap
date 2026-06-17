@@ -554,6 +554,24 @@ textarea {
   font-size: 13px;
 }
 
+.nearby-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.nearby-section {
+  display: grid;
+  gap: 7px;
+}
+
+.nearby-section > small {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .nearby-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
