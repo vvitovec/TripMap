@@ -33,7 +33,7 @@ type AuthMode = "login" | "register";
 type DestinationScope = "main" | "branch";
 type DestinationMode = "search" | "nearby" | "coordinates";
 type MemoryScope = "active" | "all";
-type SearchOrigin = "context" | "map";
+type SearchOrigin = "context" | "route" | "map";
 type ShareStatus = "idle" | "copied";
 
 const placeChips = [
@@ -273,9 +273,21 @@ export function App() {
       : mapFocus
         ? "map center"
         : "the map";
-  const searchAnchor = searchOrigin === "map" && mapFocus ? mapFocus : contextSearchAnchor;
-  const searchAnchorLabel = searchOrigin === "map" && mapFocus ? "map center" : contextSearchAnchorLabel;
+  const routeSearchAnchor = routeQueue[routeQueue.length - 1];
+  const searchAnchor =
+    searchOrigin === "route" && routeSearchAnchor
+      ? routeSearchAnchor
+      : searchOrigin === "map" && mapFocus
+        ? mapFocus
+        : contextSearchAnchor;
+  const searchAnchorLabel =
+    searchOrigin === "route" && routeSearchAnchor
+      ? "route end"
+      : searchOrigin === "map" && mapFocus
+        ? "map center"
+        : contextSearchAnchorLabel;
   const contextSearchOriginTitle = activeStop ? "Selected stop" : detail?.stops.length ? "Trip area" : "Default area";
+  const routeSearchOriginLabel = routeSearchAnchor?.name ?? "Queue a stop first";
   const mapSearchOriginLabel = mapFocus
     ? `${mapFocus.lat.toFixed(3)}, ${mapFocus.lng.toFixed(3)}`
     : "Move map first";
@@ -397,6 +409,12 @@ export function App() {
       setMemoryScope("all");
     }
   }, [activeStop, memoryScope]);
+
+  useEffect(() => {
+    if (searchOrigin === "route" && !routeQueue.length) {
+      setSearchOrigin("context");
+    }
+  }, [routeQueue.length, searchOrigin]);
 
   useEffect(() => {
     if (!activeStop || editingStop) return;
@@ -668,6 +686,7 @@ export function App() {
 
   function queuePlace(place: PlaceSearchResult) {
     setRouteQueue((items) => (items.some((item) => item.id === place.id) ? items : [...items, place]));
+    setSearchOrigin("route");
   }
 
   function removeQueuedPlace(placeId: string) {
@@ -978,9 +997,7 @@ export function App() {
 
   function queuedLegLabel(place: PlaceSearchResult, index: number) {
     const previous = index === 0 ? queueAnchor : routeQueue[index - 1];
-    const leg = previous ? `${formatDistance(distanceKm(previous, place))} leg` : place.category;
-    const away = placeDistanceLabel(place);
-    return away && away !== leg ? `${leg} · ${away}` : leg;
+    return previous ? `${formatDistance(distanceKm(previous, place))} leg` : place.category;
   }
 
   function renderStopCard(stop: Stop, variant: "main" | "branch" = "main") {
@@ -1484,6 +1501,18 @@ export function App() {
                       <span>
                         <strong>{contextSearchOriginTitle}</strong>
                         <small>{contextSearchAnchorLabel}</small>
+                      </span>
+                    </button>
+                    <button
+                      className={searchOrigin === "route" ? "search-origin-option active" : "search-origin-option"}
+                      onClick={() => setSearchOrigin("route")}
+                      disabled={!routeSearchAnchor}
+                      type="button"
+                    >
+                      <ListFilter size={15} />
+                      <span>
+                        <strong>Route end</strong>
+                        <small>{routeSearchOriginLabel}</small>
                       </span>
                     </button>
                     <button
