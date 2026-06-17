@@ -523,6 +523,7 @@ export function App() {
     [detail?.stops, queuedPlaceIds, visiblePlaceResults]
   );
   const topVisibleSavedStop = topVisiblePlace ? savedStopForPlace(topVisiblePlace) : null;
+  const topVisibleRecommendation = topVisiblePlace ? topPlaceRecommendation(topVisiblePlace, topVisibleSavedStop) : null;
   const activePreset = useMemo(
     () => destinationPresets.find((preset) => preset.id === activePresetId) ?? null,
     [activePresetId]
@@ -1612,6 +1613,55 @@ export function App() {
     return "Adds these destinations to the end of the main route in the order shown.";
   }
 
+  function destinationAddLabel(savedStop?: Stop | null) {
+    if (savedStop) return "Open saved";
+    if (destinationScope === "branch" && destinationBranchParent) return "Add side trip";
+    if (destinationScope === "main" && routeInsertionAnchor) return "Insert next";
+    if (mainStops.length) return "Add to route";
+    return "Add first stop";
+  }
+
+  function destinationQueueLabel(place?: PlaceSearchResult | null, savedStop?: Stop | null) {
+    if (savedStop) return "Saved";
+    if (place && queuedPlaceIds.has(place.id)) return "Queued";
+    if (destinationScope === "branch" && destinationBranchParent) return "Queue side trip";
+    return "Queue";
+  }
+
+  function topPlaceRecommendation(place: PlaceSearchResult, savedStop?: Stop | null) {
+    const context = [placeKindLabel(place), placeDistanceLabel(place), placeAreaLabel(place)]
+      .filter(Boolean)
+      .join(" · ");
+    if (savedStop) {
+      return {
+        title: `Already saved as ${savedStop.title}`,
+        hint: context || "Open the saved stop or explore nearby places from it."
+      };
+    }
+    if (destinationScope === "branch" && destinationBranchParent) {
+      return {
+        title: `Best match becomes a side trip from ${destinationBranchParent.title}`,
+        hint: context || "Queued places will stay grouped under the same parent stop."
+      };
+    }
+    if (destinationScope === "main" && routeInsertionAnchor) {
+      return {
+        title: `Best match inserts after ${routeInsertionAnchor.title}`,
+        hint: context || "Later stops will move down to keep the route order."
+      };
+    }
+    if (mainStops.length) {
+      return {
+        title: "Best match adds to the end of this route",
+        hint: context || "Queue more results first if you want to commit several stops together."
+      };
+    }
+    return {
+      title: "Best match can start this trip",
+      hint: context || "Add it now or queue nearby ideas first."
+    };
+  }
+
   function mediaLocationLabel(item: MediaItem) {
     const coordinates =
       typeof item.latitude === "number" && typeof item.longitude === "number"
@@ -2423,7 +2473,7 @@ export function App() {
                           type="button"
                         >
                           {topVisibleSavedStop ? <Check size={13} /> : <Plus size={13} />}
-                          {topVisibleSavedStop ? "Open saved" : "Add top"}
+                          {destinationAddLabel(topVisibleSavedStop)}
                         </button>
                         <button
                           onClick={() => queuePlace(topVisiblePlace)}
@@ -2431,7 +2481,7 @@ export function App() {
                           type="button"
                         >
                           {queuedPlaceIds.has(topVisiblePlace.id) || topVisibleSavedStop ? <Check size={13} /> : <ListFilter size={13} />}
-                          {topVisibleSavedStop ? "Saved" : queuedPlaceIds.has(topVisiblePlace.id) ? "Queued" : "Queue top"}
+                          {destinationQueueLabel(topVisiblePlace, topVisibleSavedStop)}
                         </button>
                         <button
                           onClick={queueTopVisiblePlaces}
@@ -2443,6 +2493,15 @@ export function App() {
                       </div>
                     ) : null}
                   </div>
+                  {topVisiblePlace && topVisibleRecommendation ? (
+                    <div className="place-recommendation">
+                      <MapPin size={15} />
+                      <span>
+                        <strong>{topVisibleRecommendation.title}</strong>
+                        <small>{topVisiblePlace.name} · {topVisibleRecommendation.hint}</small>
+                      </span>
+                    </div>
+                  ) : null}
                   {placeResultFilters.length > 1 ? (
                     <div className="place-result-filters">
                       <button
@@ -2503,7 +2562,7 @@ export function App() {
                           type="button"
                         >
                           {savedStop ? <Check size={14} /> : <Plus size={14} />}
-                          {savedStop ? "Open" : "Add"}
+                          {destinationAddLabel(savedStop)}
                         </button>
                         <button
                           className="place-result-nearby"
@@ -2520,7 +2579,7 @@ export function App() {
                           type="button"
                         >
                           {queuedPlaceIds.has(place.id) || savedStop ? <Check size={14} /> : <ListFilter size={14} />}
-                          {savedStop ? "Saved" : queuedPlaceIds.has(place.id) ? "Queued" : "Queue"}
+                          {destinationQueueLabel(place, savedStop)}
                         </button>
                       </article>
                     );

@@ -829,6 +829,7 @@ textarea {
 
 .place-summary-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-end;
 }
@@ -855,6 +856,37 @@ textarea {
 .place-summary-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.place-recommendation {
+  border: 1px solid #bbebc8;
+  border-radius: 8px;
+  background: #f4fbf6;
+  color: #276749;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 9px 10px;
+}
+
+.place-recommendation span,
+.place-recommendation strong,
+.place-recommendation small {
+  display: block;
+  min-width: 0;
+}
+
+.place-recommendation strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.place-recommendation small {
+  margin-top: 3px;
+  color: #5d7a6f;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .place-result-filters {
@@ -894,7 +926,7 @@ textarea {
   border-radius: 8px;
   background: #fff;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px 92px 86px;
+  grid-template-columns: minmax(0, 1fr) 108px;
   gap: 0;
   overflow: hidden;
   text-align: left;
@@ -919,6 +951,7 @@ textarea {
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 8px;
   text-align: left;
+  grid-row: span 3;
 }
 
 .place-result-add,
@@ -932,14 +965,20 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  font-size: 13px;
+  min-height: 40px;
+  padding: 5px 7px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
 }
 
 .place-result-nearby {
+  border-top: 1px solid #edf1ee;
   color: #9a3412;
 }
 
 .place-result-queue {
+  border-top: 1px solid #edf1ee;
   color: #35536d;
 }
 
