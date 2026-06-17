@@ -1,15 +1,22 @@
 import maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
-import type { Trip } from "./types";
+import type { PlaceSearchResult, Trip } from "./types";
 
 type Props = {
   trips: Trip[];
   selectedTripId: string | null;
+  previewPlace?: PlaceSearchResult | null;
   onSelectTrip: (id: string) => void;
-  onAddStop: (lat: number, lng: number) => void;
+  onMapClick: (lat: number, lng: number) => void;
 };
 
-export function TripMap({ trips, selectedTripId, onSelectTrip, onAddStop }: Props) {
+export function TripMap({
+  trips,
+  selectedTripId,
+  previewPlace,
+  onSelectTrip,
+  onMapClick
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
 
@@ -39,11 +46,27 @@ export function TripMap({ trips, selectedTripId, onSelectTrip, onAddStop }: Prop
           coordinates: trip.stops.map((stop) => [stop.lng, stop.lat])
         }
       }));
+    const previewFeature = previewPlace
+      ? {
+          type: "Feature" as const,
+          properties: {
+            tripId: "",
+            title: previewPlace.name,
+            tripTitle: "Preview",
+            selected: true,
+            preview: true
+          },
+          geometry: {
+            type: "Point" as const,
+            coordinates: [previewPlace.lng, previewPlace.lat]
+          }
+        }
+      : null;
     return {
       type: "FeatureCollection" as const,
-      features: [...lineFeatures, ...pointFeatures]
+      features: [...lineFeatures, ...pointFeatures, ...(previewFeature ? [previewFeature] : [])]
     };
-  }, [selectedTripId, trips]);
+  }, [previewPlace, selectedTripId, trips]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -90,7 +113,14 @@ export function TripMap({ trips, selectedTripId, onSelectTrip, onAddStop }: Prop
         filter: ["==", "$type", "Point"],
         paint: {
           "circle-radius": ["case", ["get", "selected"], 10, 7],
-          "circle-color": ["case", ["get", "selected"], "#f97316", "#f8fafc"],
+          "circle-color": [
+            "case",
+            ["get", "preview"],
+            "#22c55e",
+            ["get", "selected"],
+            "#f97316",
+            "#f8fafc"
+          ],
           "circle-stroke-color": "#0f172a",
           "circle-stroke-width": 2
         }
@@ -116,13 +146,14 @@ export function TripMap({ trips, selectedTripId, onSelectTrip, onAddStop }: Prop
 
     map.on("click", "trip-points", (event) => {
       const feature = event.features?.[0];
+      if (feature?.properties?.preview) return;
       const tripId = feature?.properties?.tripId;
       if (tripId) onSelectTrip(tripId);
     });
 
     map.on("click", (event) => {
       const features = map.queryRenderedFeatures(event.point, { layers: ["trip-points"] });
-      if (features.length === 0) onAddStop(event.lngLat.lat, event.lngLat.lng);
+      if (features.length === 0) onMapClick(event.lngLat.lat, event.lngLat.lng);
     });
 
     mapRef.current = map;
@@ -135,12 +166,20 @@ export function TripMap({ trips, selectedTripId, onSelectTrip, onAddStop }: Prop
   }, [geojson]);
 
   useEffect(() => {
+    if (previewPlace && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [previewPlace.lng, previewPlace.lat],
+        zoom: Math.max(mapRef.current.getZoom(), 12),
+        duration: 850
+      });
+      return;
+    }
     const trip = trips.find((item) => item.id === selectedTripId);
     if (!trip?.stops.length || !mapRef.current) return;
     const bounds = new maplibregl.LngLatBounds();
     trip.stops.forEach((stop) => bounds.extend([stop.lng, stop.lat]));
     mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 900 });
-  }, [selectedTripId, trips]);
+  }, [previewPlace, selectedTripId, trips]);
 
   return <div ref={containerRef} className="map-canvas" />;
 }

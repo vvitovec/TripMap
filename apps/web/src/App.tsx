@@ -1,10 +1,14 @@
 import {
   Camera,
+  Check,
+  Crosshair,
   FolderPlus,
   Image,
+  Loader2,
   LogOut,
   MapPin,
   Plus,
+  Search,
   Route,
   Share2,
   Upload
@@ -12,7 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { TripMap } from "./TripMap";
-import type { Folder, Trip, TripDetail, User } from "./types";
+import type { Folder, PlaceSearchResult, Trip, TripDetail, User } from "./types";
 
 type AuthMode = "login" | "register";
 
@@ -29,6 +33,12 @@ export function App() {
   const [presentation, setPresentation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeResults, setPlaceResults] = useState<PlaceSearchResult[]>([]);
+  const [placeDraft, setPlaceDraft] = useState<PlaceSearchResult | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftNote, setDraftNote] = useState("");
+  const [searchingPlaces, setSearchingPlaces] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -65,6 +75,42 @@ export function App() {
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
     [selectedTripId, trips]
   );
+  const tripCenter = useMemo(() => {
+    const stops = detail?.stops ?? currentTrip?.stops ?? [];
+    if (!stops.length) return undefined;
+    return {
+      lat: stops.reduce((sum, stop) => sum + stop.lat, 0) / stops.length,
+      lng: stops.reduce((sum, stop) => sum + stop.lng, 0) / stops.length
+    };
+  }, [currentTrip?.stops, detail?.stops]);
+
+  useEffect(() => {
+    const query = placeQuery.trim();
+    if (!user || !selectedTripId || query.length < 3) {
+      setPlaceResults([]);
+      setSearchingPlaces(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchingPlaces(true);
+    const timer = window.setTimeout(() => {
+      api
+        .searchPlaces(query, tripCenter)
+        .then(({ places }) => {
+          if (!cancelled) setPlaceResults(places);
+        })
+        .catch((error) => {
+          if (!cancelled) setError(error.message);
+        })
+        .finally(() => {
+          if (!cancelled) setSearchingPlaces(false);
+        });
+    }, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [placeQuery, selectedTripId, tripCenter, user]);
 
   async function handleAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,18 +150,50 @@ export function App() {
     }
   }
 
-  async function addStopFromMap(lat: number, lng: number) {
+  function selectPlace(place: PlaceSearchResult) {
+    setPlaceDraft(place);
+    setDraftTitle(place.name);
+    setDraftNote("");
+  }
+
+  function previewMapPin(lat: number, lng: number) {
     if (!selectedTripId) return;
-    const sortOrder = detail?.stops.length ?? currentTrip?.stops.length ?? 0;
-    await api.addStop(selectedTripId, {
-      title: sortOrder === 0 ? "Main stop" : `Stop ${sortOrder + 1}`,
-      note: "",
+    const label = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    selectPlace({
+      id: `map-${lat}-${lng}`,
+      name: "Dropped pin",
+      label,
+      category: "map pin",
+      type: "pin",
       lat,
       lng,
-      sortOrder
+      source: "map"
     });
-    setDetail(await api.trip(selectedTripId));
-    await load();
+  }
+
+  async function addStopFromDraft() {
+    if (!selectedTripId || !placeDraft) return;
+    setBusy(true);
+    setError(null);
+    const sortOrder = detail?.stops.length ?? currentTrip?.stops.length ?? 0;
+    try {
+      await api.addStop(selectedTripId, {
+        title: draftTitle.trim() || placeDraft.name || `Stop ${sortOrder + 1}`,
+        note: draftNote.trim(),
+        lat: placeDraft.lat,
+        lng: placeDraft.lng,
+        sortOrder
+      });
+      setDetail(await api.trip(selectedTripId));
+      setPlaceDraft(null);
+      setDraftTitle("");
+      setDraftNote("");
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function upload(files: FileList | null) {
@@ -140,7 +218,7 @@ export function App() {
               trips={[{ ...detail.trip, stops: detail.stops }]}
               selectedTripId={detail.trip.id}
               onSelectTrip={() => undefined}
-              onAddStop={() => undefined}
+              onMapClick={() => undefined}
             />
             <aside className="share-panel">
               <p className="eyebrow">Shared TripMap</p>
@@ -252,7 +330,13 @@ export function App() {
       </aside>
 
       <section className="map-stage">
-        <TripMap trips={trips} selectedTripId={selectedTripId} onSelectTrip={setSelectedTripId} onAddStop={addStopFromMap} />
+        <TripMap
+          trips={trips}
+          selectedTripId={selectedTripId}
+          previewPlace={placeDraft}
+          onSelectTrip={setSelectedTripId}
+          onMapClick={previewMapPin}
+        />
       </section>
 
       <aside className="detail-panel">
@@ -268,6 +352,79 @@ export function App() {
               <span><MapPin /> {detail.stops.length} stops</span>
               <span><Image /> {mediaCount} media</span>
             </div>
+
+            <section className="place-workflow">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">Add destination</p>
+                  <h3>Find a place</h3>
+                </div>
+                {searchingPlaces ? <Loader2 className="spin" size={18} /> : <Search size={18} />}
+              </div>
+              <div className="search-input">
+                <Search size={17} />
+                <input
+                  value={placeQuery}
+                  onChange={(event) => setPlaceQuery(event.target.value)}
+                  placeholder="Address, hotel, resort, landmark"
+                />
+              </div>
+              <div className="quick-chips">
+                {["hotel", "resort", "landmark", "airport", "beach", "park"].map((label) => (
+                  <button
+                    key={label}
+                    onClick={() => setPlaceQuery(`${label} ${detail.trip.title}`)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {placeResults.length ? (
+                <div className="place-results">
+                  {placeResults.map((place) => (
+                    <button
+                      key={place.id}
+                      className={placeDraft?.id === place.id ? "place-result active" : "place-result"}
+                      onClick={() => selectPlace(place)}
+                      type="button"
+                    >
+                      <MapPin size={16} />
+                      <span>
+                        <strong>{place.name}</strong>
+                        <small>{place.category} · {place.label}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : placeQuery.trim().length >= 3 && !searchingPlaces ? (
+                <p className="muted">No places found.</p>
+              ) : null}
+
+              {placeDraft ? (
+                <div className="draft-stop">
+                  <div className="draft-map-row">
+                    <Crosshair size={17} />
+                    <span>{placeDraft.label}</span>
+                  </div>
+                  <input
+                    value={draftTitle}
+                    onChange={(event) => setDraftTitle(event.target.value)}
+                    placeholder="Stop title"
+                  />
+                  <textarea
+                    value={draftNote}
+                    onChange={(event) => setDraftNote(event.target.value)}
+                    placeholder="Short note"
+                    rows={3}
+                  />
+                  <button className="wide-button" onClick={addStopFromDraft} disabled={busy}>
+                    <Check size={16} /> Add to trip
+                  </button>
+                </div>
+              ) : null}
+            </section>
 
             <label className="upload-box">
               <Upload />

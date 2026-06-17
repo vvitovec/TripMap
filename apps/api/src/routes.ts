@@ -8,6 +8,23 @@ import { mediaQueue } from "./queue.js";
 import { getObject, putObject } from "./storage.js";
 
 type AuthUser = { id: string; email: string; name: string };
+type PlaceResult = {
+  place_id: number;
+  osm_type?: string;
+  osm_id?: number;
+  lat: string;
+  lon: string;
+  display_name: string;
+  name?: string;
+  class?: string;
+  type?: string;
+  importance?: number;
+  address?: Record<string, string>;
+  namedetails?: Record<string, string>;
+};
+
+const placeSearchCache = new Map<string, { expiresAt: number; places: unknown[] }>();
+let lastNominatimSearchAt = 0;
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -41,6 +58,103 @@ const stopSchema = z.object({
   departedAt: z.string().datetime().nullable().optional(),
   branchOf: z.string().uuid().nullable().optional()
 });
+
+const placeSearchSchema = z.object({
+  q: z.string().trim().min(3).max(180),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional()
+});
+
+function placeName(result: PlaceResult) {
+  return (
+    result.name ||
+    result.namedetails?.name ||
+    result.address?.hotel ||
+    result.address?.attraction ||
+    result.address?.resort ||
+    result.address?.amenity ||
+    result.address?.tourism ||
+    result.address?.road ||
+    result.display_name.split(",")[0]?.trim() ||
+    "Place"
+  );
+}
+
+function placeCategory(result: PlaceResult) {
+  if (result.class === "tourism" && result.type) return result.type;
+  if (result.class === "amenity" && result.type) return result.type;
+  if (result.class === "historic" && result.type) return result.type;
+  if (result.class === "leisure" && result.type) return result.type;
+  return result.class || result.type || "place";
+}
+
+function viewbox(lat: number, lng: number) {
+  const delta = 2.5;
+  return `${lng - delta},${lat + delta},${lng + delta},${lat - delta}`;
+}
+
+async function waitForNominatimSlot() {
+  const elapsed = Date.now() - lastNominatimSearchAt;
+  const waitMs = Math.max(0, 1100 - elapsed);
+  if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+  lastNominatimSearchAt = Date.now();
+}
+
+async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
+  const cacheKey = JSON.stringify(input).toLowerCase();
+  const cached = placeSearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.places;
+
+  await waitForNominatimSlot();
+  const params = new URLSearchParams({
+    q: input.q,
+    format: "jsonv2",
+    addressdetails: "1",
+    namedetails: "1",
+    extratags: "1",
+    limit: "8",
+    "accept-language": "en"
+  });
+  if (input.lat !== undefined && input.lng !== undefined) {
+    params.set("viewbox", viewbox(input.lat, input.lng));
+    params.set("bounded", "0");
+  }
+
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+    headers: {
+      "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
+      Referer: "https://trip.vvitovec.com"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Place search failed with status ${response.status}`);
+  }
+  const data = (await response.json()) as PlaceResult[];
+  const places = data
+    .map((result) => ({
+      id: `${result.osm_type ?? "place"}-${result.osm_id ?? result.place_id}`,
+      name: placeName(result),
+      label: result.display_name,
+      category: placeCategory(result),
+      type: result.type ?? result.class ?? "place",
+      lat: Number(result.lat),
+      lng: Number(result.lon),
+      importance: result.importance,
+      address: result.address ?? {},
+      source: "nominatim" as const
+    }))
+    .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
+
+  placeSearchCache.set(cacheKey, {
+    expiresAt: Date.now() + 1000 * 60 * 30,
+    places
+  });
+  if (placeSearchCache.size > 200) {
+    const firstKey = placeSearchCache.keys().next().value;
+    if (firstKey) placeSearchCache.delete(firstKey);
+  }
+  return places;
+}
 
 function cookieOptions() {
   return {
@@ -168,6 +282,18 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/auth/me", async (request) => ({ user: await currentUser(request) }));
+
+  app.get("/places/search", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const input = placeSearchSchema.parse(request.query);
+    try {
+      return { places: await searchPlaces(input) };
+    } catch (error) {
+      request.log.warn({ error }, "place search failed");
+      reply.code(502).send({ error: "Place search is temporarily unavailable" });
+    }
+  });
 
   app.get("/folders", async (request, reply) => {
     const user = await requireUser(request, reply);

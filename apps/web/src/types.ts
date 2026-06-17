@@ -43,6 +43,19 @@ export type Note = {
   created_at: string;
 };
 
+export type PlaceSearchResult = {
+  id: string;
+  name: string;
+  label: string;
+  category: string;
+  type: string;
+  lat: number;
+  lng: number;
+  importance?: number;
+  address?: Record<string, string>;
+  source: "nominatim" | "map";
+};
+
 export type Trip = {
   id: string;
   title: string;

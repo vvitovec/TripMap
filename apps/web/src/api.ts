@@ -1,4 +1,4 @@
-import type { Folder, Trip, TripDetail, User } from "./types";
+import type { Folder, PlaceSearchResult, Trip, TripDetail, User } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
 
@@ -47,6 +47,14 @@ export const api = {
     }),
   trip: (id: string) => request<TripDetail>(`/trips/${id}`),
   sharedTrip: (token: string) => request<TripDetail>(`/share/${token}`),
+  searchPlaces: (query: string, near?: { lat: number; lng: number }) => {
+    const params = new URLSearchParams({ q: query });
+    if (near) {
+      params.set("lat", String(near.lat));
+      params.set("lng", String(near.lng));
+    }
+    return request<{ places: PlaceSearchResult[] }>(`/places/search?${params}`);
+  },
   addStop: (
     tripId: string,
     input: { title: string; note: string; lat: number; lng: number; sortOrder: number }
