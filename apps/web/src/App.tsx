@@ -33,6 +33,7 @@ type AuthMode = "login" | "register";
 type DestinationScope = "main" | "branch";
 type DestinationMode = "search" | "nearby" | "coordinates";
 type MemoryScope = "active" | "all";
+type SearchOrigin = "context" | "map";
 type ShareStatus = "idle" | "copied";
 
 const placeChips = [
@@ -99,6 +100,7 @@ export function App() {
   const [manualLabel, setManualLabel] = useState("");
   const [routeQueue, setRouteQueue] = useState<PlaceSearchResult[]>([]);
   const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchOrigin, setSearchOrigin] = useState<SearchOrigin>("context");
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<"all" | "unfiled" | string>("all");
@@ -260,17 +262,23 @@ export function App() {
       lng: stops.reduce((sum, stop) => sum + stop.lng, 0) / stops.length
     };
   }, [currentTrip?.stops, detail?.stops]);
-  const searchAnchor = useMemo(
+  const contextSearchAnchor = useMemo(
     () => (activeStop ? { lat: activeStop.lat, lng: activeStop.lng } : tripCenter ?? mapFocus ?? undefined),
     [activeStop, mapFocus, tripCenter]
   );
-  const searchAnchorLabel = activeStop
+  const contextSearchAnchorLabel = activeStop
     ? activeStop.title
     : detail?.stops.length
       ? detail.trip.title
       : mapFocus
         ? "map center"
         : "the map";
+  const searchAnchor = searchOrigin === "map" && mapFocus ? mapFocus : contextSearchAnchor;
+  const searchAnchorLabel = searchOrigin === "map" && mapFocus ? "map center" : contextSearchAnchorLabel;
+  const contextSearchOriginTitle = activeStop ? "Selected stop" : detail?.stops.length ? "Trip area" : "Default area";
+  const mapSearchOriginLabel = mapFocus
+    ? `${mapFocus.lat.toFixed(3)}, ${mapFocus.lng.toFixed(3)}`
+    : "Move map first";
   const rankedPlaceResults = useMemo(() => {
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
@@ -537,6 +545,7 @@ export function App() {
     resetDestinationDraft();
     setDestinationScope(scope);
     setDestinationMode(mode);
+    setSearchOrigin("context");
     setPlaceQuery(query);
     setError(null);
     scrollToDestinationPanel();
@@ -1465,6 +1474,31 @@ export function App() {
 
               {destinationMode !== "coordinates" ? (
                 <>
+                  <div className="search-origin-toggle">
+                    <button
+                      className={searchOrigin === "context" ? "search-origin-option active" : "search-origin-option"}
+                      onClick={() => setSearchOrigin("context")}
+                      type="button"
+                    >
+                      <Route size={15} />
+                      <span>
+                        <strong>{contextSearchOriginTitle}</strong>
+                        <small>{contextSearchAnchorLabel}</small>
+                      </span>
+                    </button>
+                    <button
+                      className={searchOrigin === "map" ? "search-origin-option active" : "search-origin-option"}
+                      onClick={() => setSearchOrigin("map")}
+                      disabled={!mapFocus}
+                      type="button"
+                    >
+                      <Crosshair size={15} />
+                      <span>
+                        <strong>Map center</strong>
+                        <small>{mapSearchOriginLabel}</small>
+                      </span>
+                    </button>
+                  </div>
                   <div className="search-input">
                     <Search size={17} />
                     <input
