@@ -8,6 +8,7 @@ type Props = {
   selectedStopId?: string | null;
   previewPlace?: PlaceSearchResult | null;
   previewPlaces?: PlaceSearchResult[];
+  previewRoute?: Array<{ lat: number; lng: number }>;
   onSelectTrip: (id: string) => void;
   onSelectStop?: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
@@ -20,6 +21,7 @@ export function TripMap({
   selectedStopId,
   previewPlace,
   previewPlaces,
+  previewRoute,
   onSelectTrip,
   onSelectStop,
   onMapClick,
@@ -27,6 +29,7 @@ export function TripMap({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const previewRoutePoints = previewRoute ?? [];
   const effectivePreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     previewPlaces?.forEach((place) => previews.set(place.id, place));
@@ -104,11 +107,27 @@ export function TripMap({
         coordinates: [place.lng, place.lat]
       }
     }));
+    const previewRouteFeature =
+      previewRoutePoints.length > 1
+        ? {
+            type: "Feature" as const,
+            properties: { tripId: "", selected: true, kind: "preview-route" },
+            geometry: {
+              type: "LineString" as const,
+              coordinates: previewRoutePoints.map((point) => [point.lng, point.lat])
+            }
+          }
+        : null;
     return {
       type: "FeatureCollection" as const,
-      features: [...lineFeatures, ...pointFeatures, ...previewFeatures]
+      features: [
+        ...lineFeatures,
+        ...(previewRouteFeature ? [previewRouteFeature] : []),
+        ...pointFeatures,
+        ...previewFeatures
+      ]
     };
-  }, [effectivePreviewPlaces, selectedStopId, selectedTripId, trips]);
+  }, [effectivePreviewPlaces, previewRoutePoints, selectedStopId, selectedTripId, trips]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -164,6 +183,18 @@ export function TripMap({
           "line-color": ["case", ["get", "selected"], "#22c55e", "#67e8f9"],
           "line-dasharray": [1.4, 1.2],
           "line-opacity": 0.9
+        }
+      });
+      map.addLayer({
+        id: "preview-route",
+        type: "line",
+        source: "trips",
+        filter: ["all", ["==", "$type", "LineString"], ["==", ["get", "kind"], "preview-route"]],
+        paint: {
+          "line-width": 4,
+          "line-color": "#fde047",
+          "line-dasharray": [1.2, 1],
+          "line-opacity": 0.95
         }
       });
       map.addLayer({
@@ -238,6 +269,12 @@ export function TripMap({
   }, [geojson]);
 
   useEffect(() => {
+    if (previewRoutePoints.length > 1 && mapRef.current) {
+      const bounds = new maplibregl.LngLatBounds();
+      previewRoutePoints.forEach((point) => bounds.extend([point.lng, point.lat]));
+      mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 850 });
+      return;
+    }
     if (effectivePreviewPlaces.length === 1 && mapRef.current) {
       const place = effectivePreviewPlaces[0]!;
       mapRef.current.flyTo({
@@ -258,7 +295,7 @@ export function TripMap({
     const bounds = new maplibregl.LngLatBounds();
     trip.stops.forEach((stop) => bounds.extend([stop.lng, stop.lat]));
     mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 900 });
-  }, [effectivePreviewPlaces, selectedTripId, trips]);
+  }, [effectivePreviewPlaces, previewRoutePoints, selectedTripId, trips]);
 
   return <div ref={containerRef} className="map-canvas" />;
 }

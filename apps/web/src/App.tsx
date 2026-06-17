@@ -287,6 +287,16 @@ export function App() {
     if (!activeStop.branch_of) return activeStop;
     return stopById.get(activeStop.branch_of) ?? activeStop;
   }, [activeStop, stopById]);
+  const mapPreviewRoute = useMemo(() => {
+    if (!mapPreviewPlaces.length) return [];
+    const lastMainStop = mainStops[mainStops.length - 1] ?? null;
+    const anchor =
+      destinationScope === "branch"
+        ? activeStop
+        : routeInsertionAnchor ?? lastMainStop;
+    const previewPoints = mapPreviewPlaces.map((place) => ({ lat: place.lat, lng: place.lng }));
+    return anchor ? [{ lat: anchor.lat, lng: anchor.lng }, ...previewPoints] : previewPoints;
+  }, [activeStop, destinationScope, mainStops, mapPreviewPlaces, routeInsertionAnchor]);
   const routeIndexByStopId = useMemo(() => {
     const indexes = new Map<string, number>();
     orderedStops.forEach((stop, index) => indexes.set(stop.id, index));
@@ -1193,6 +1203,7 @@ export function App() {
           selectedStopId={selectedStopId}
           previewPlace={placeDraft}
           previewPlaces={mapPreviewPlaces}
+          previewRoute={mapPreviewRoute}
           onSelectTrip={selectTripId}
           onSelectStop={selectStopId}
           onMapClick={previewMapPin}
