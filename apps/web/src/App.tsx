@@ -2487,22 +2487,31 @@ export function App() {
                 <div className="search-empty-state">
                   <div>
                     <strong>No places found</strong>
-                    <small>Try a broader category, search around the map center, or drop an exact pin.</small>
+                    <small>Try a nearby category, search around the map center, or drop an exact pin.</small>
+                  </div>
+                  <div className="search-empty-suggestions">
+                    <span>Try instead</span>
+                    <div className="quick-chips compact-chips">
+                      {contextualSearchChips.slice(0, 4).map((chip) => (
+                        <button key={chip.label} onClick={() => searchNearbyCategory(chip.query)} type="button">
+                          <span>{chip.label}</span>
+                          <small>{chip.hint}</small>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="search-empty-actions">
-                    {placeChips.slice(0, 3).map((chip) => (
-                      <button key={chip.label} onClick={() => searchNearbyCategory(chip.query)} type="button">
-                        <Compass size={14} /> {chip.label}
-                      </button>
-                    ))}
                     <button onClick={searchFromMapCenter} disabled={!mapFocus} type="button">
-                      <Crosshair size={14} /> Map center
+                      <Crosshair size={14} />
+                      <span>Map center</span>
                     </button>
                     <button onClick={() => openDestinationMode("coordinates")} type="button">
-                      <MapPin size={14} /> Exact pin
+                      <MapPin size={14} />
+                      <span>Exact pin</span>
                     </button>
                     <button onClick={() => setPlaceQuery("")} type="button">
-                      <X size={14} /> Clear
+                      <X size={14} />
+                      <span>Clear</span>
                     </button>
                   </div>
                 </div>

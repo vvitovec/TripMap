@@ -1011,6 +1011,23 @@ textarea {
   line-height: 1.35;
 }
 
+.search-empty-suggestions {
+  display: grid;
+  gap: 7px;
+}
+
+.search-empty-suggestions > span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.compact-chips {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .search-empty-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
