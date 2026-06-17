@@ -577,8 +577,8 @@ export function App() {
     }
   }
 
-  async function addStopFromDraft() {
-    if (!selectedTripId || !placeDraft) return;
+  async function addPlaceToRoute(place: PlaceSearchResult, title: string, note: string) {
+    if (!selectedTripId) return;
     setBusy(true);
     setError(null);
     const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
@@ -595,10 +595,10 @@ export function App() {
     try {
       await makeRoomForSortOrder(sortOrder);
       const { stop } = await api.addStop(selectedTripId, {
-        title: draftTitle.trim() || placeDraft.name || `Stop ${sortOrder + 1}`,
-        note: draftNote.trim(),
-        lat: placeDraft.lat,
-        lng: placeDraft.lng,
+        title: title.trim() || place.name || `Stop ${sortOrder + 1}`,
+        note: note.trim(),
+        lat: place.lat,
+        lng: place.lng,
         sortOrder,
         branchOf: branchParent ? branchParent.id : null
       });
@@ -611,6 +611,11 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function addStopFromDraft() {
+    if (!placeDraft) return;
+    await addPlaceToRoute(placeDraft, draftTitle, draftNote);
   }
 
   async function createStopFromMedia(item: MediaItem) {
@@ -1381,22 +1386,30 @@ export function App() {
               {rankedPlaceResults.length > 0 && destinationMode !== "coordinates" ? (
                 <div className="place-results">
                   {rankedPlaceResults.map((place) => (
-                    <button
+                    <article
                       key={place.id}
                       className={placeDraft?.id === place.id ? "place-result active" : "place-result"}
-                      onClick={() => selectPlace(place)}
-                      type="button"
                     >
-                      <MapPin size={16} />
-                      <span>
-                        <strong>{place.name}</strong>
-                        <small>
-                          {place.category}
-                          {placeDistanceLabel(place) ? ` · ${placeDistanceLabel(place)}` : ""}
-                        </small>
-                        <small>{place.label}</small>
-                      </span>
-                    </button>
+                      <button className="place-result-main" onClick={() => selectPlace(place)} type="button">
+                        <MapPin size={16} />
+                        <span>
+                          <strong>{place.name}</strong>
+                          <small>
+                            {place.category}
+                            {placeDistanceLabel(place) ? ` · ${placeDistanceLabel(place)}` : ""}
+                          </small>
+                          <small>{place.label}</small>
+                        </span>
+                      </button>
+                      <button
+                        className="place-result-add"
+                        onClick={() => addPlaceToRoute(place, place.name, "")}
+                        disabled={busy}
+                        type="button"
+                      >
+                        <Plus size={14} /> Add
+                      </button>
+                    </article>
                   ))}
                 </div>
               ) : destinationMode !== "coordinates" && placeQuery.trim().length >= 3 && !searchingPlaces ? (

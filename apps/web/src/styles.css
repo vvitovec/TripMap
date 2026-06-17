@@ -557,16 +557,44 @@ textarea {
   border: 1px solid #dbe3df;
   border-radius: 8px;
   background: #fff;
-  padding: 10px;
   display: grid;
-  grid-template-columns: 22px 1fr;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0;
+  overflow: hidden;
   text-align: left;
 }
 
 .place-result.active {
   border-color: #22c55e;
   box-shadow: 0 10px 26px rgba(34, 197, 94, 0.12);
+}
+
+.place-result-main {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  text-align: left;
+}
+
+.place-result-add {
+  width: 76px;
+  border: 0;
+  border-left: 1px solid #edf1ee;
+  background: #f8faf8;
+  color: #276749;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.place-result-add:disabled {
+  opacity: 0.5;
 }
 
 .place-result strong,
@@ -1197,5 +1225,16 @@ textarea {
   .located-media-list button {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .place-result {
+    grid-template-columns: 1fr;
+  }
+
+  .place-result-add {
+    width: 100%;
+    min-height: 34px;
+    border-left: 0;
+    border-top: 1px solid #edf1ee;
   }
 }
