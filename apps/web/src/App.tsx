@@ -666,6 +666,19 @@ export function App() {
     setRouteQueue((items) => items.filter((item) => item.id !== placeId));
   }
 
+  function moveQueuedPlace(placeId: string, direction: -1 | 1) {
+    setRouteQueue((items) => {
+      const index = items.findIndex((item) => item.id === placeId);
+      const swapIndex = index + direction;
+      if (index < 0 || swapIndex < 0 || swapIndex >= items.length) return items;
+      const next = [...items];
+      const current = next[index]!;
+      next[index] = next[swapIndex]!;
+      next[swapIndex] = current;
+      return next;
+    });
+  }
+
   async function addQueuedPlaces() {
     if (!selectedTripId || !routeQueue.length) return;
     setBusy(true);
@@ -1534,9 +1547,27 @@ export function App() {
                           <strong>{place.name}</strong>
                           <small>{placeDistanceLabel(place) ?? place.category}</small>
                         </div>
-                        <button onClick={() => removeQueuedPlace(place.id)} type="button" title="Remove from queue">
-                          <X size={14} />
-                        </button>
+                        <div className="queue-row-actions">
+                          <button
+                            onClick={() => moveQueuedPlace(place.id, -1)}
+                            disabled={index === 0}
+                            type="button"
+                            title="Move up"
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                          <button
+                            onClick={() => moveQueuedPlace(place.id, 1)}
+                            disabled={index === routeQueue.length - 1}
+                            type="button"
+                            title="Move down"
+                          >
+                            <ChevronDown size={14} />
+                          </button>
+                          <button onClick={() => removeQueuedPlace(place.id)} type="button" title="Remove from queue">
+                            <X size={14} />
+                          </button>
+                        </div>
                       </article>
                     ))}
                   </div>
