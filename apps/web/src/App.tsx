@@ -594,12 +594,19 @@ export function App() {
           : ["landmark", "restaurant", "hotel"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, destinationScope]);
+  const mapSearchPreviewPlaces = useMemo(() => {
+    if (destinationMode === "coordinates" || placeQuery.trim().length < 3) return [];
+    return visiblePlaceResults.filter((place) => !savedStopForPlace(place)).slice(0, 12);
+  }, [destinationMode, detail?.stops, placeQuery, visiblePlaceResults]);
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     routeQueue.forEach((item) => previews.set(item.place.id, item.place));
     if (placeDraft) previews.set(placeDraft.id, placeDraft);
+    mapSearchPreviewPlaces.forEach((place) => {
+      if (!previews.has(place.id)) previews.set(place.id, place);
+    });
     return [...previews.values()];
-  }, [placeDraft, routeQueue]);
+  }, [mapSearchPreviewPlaces, placeDraft, routeQueue]);
   const routeInsertionAnchor = useMemo(() => {
     if (!activeStop) return null;
     if (!activeStop.branch_of) return activeStop;
@@ -2555,7 +2562,10 @@ export function App() {
                       <strong>
                         {visiblePlaceResults.length} of {rankedPlaceResults.length} result{rankedPlaceResults.length === 1 ? "" : "s"}
                       </strong>
-                      <small>Nearest first near {searchAnchorLabel}</small>
+                      <small>
+                        Nearest first near {searchAnchorLabel}
+                        {mapSearchPreviewPlaces.length ? ` · ${mapSearchPreviewPlaces.length} on map` : ""}
+                      </small>
                     </div>
                     {topVisiblePlace ? (
                       <div className="place-summary-actions">
