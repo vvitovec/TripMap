@@ -245,6 +245,7 @@ export function App() {
     ? location.pathname.split("/share/")[1]
     : null;
   const destinationPanelRef = useRef<HTMLElement | null>(null);
+  const destinationDraftRef = useRef<HTMLDivElement | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -769,6 +770,12 @@ export function App() {
     });
   }
 
+  function scrollToDestinationDraft() {
+    window.requestAnimationFrame(() => {
+      destinationDraftRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
   function openDestinationMode(mode: DestinationMode) {
     resetDestinationDraft();
     setPlaceQuery("");
@@ -851,7 +858,7 @@ export function App() {
     }
   }
 
-  function selectPlace(place: PlaceSearchResult) {
+  function selectPlace(place: PlaceSearchResult, options: { revealDraft?: boolean } = { revealDraft: true }) {
     setPlaceDraft(place);
     setDraftTitle(place.name);
     setDraftNote("");
@@ -862,6 +869,7 @@ export function App() {
       setDestinationScope("branch");
       setDestinationBranchParentId(routeInsertionAnchor?.id ?? activeStop.id);
     }
+    if (options.revealDraft !== false) scrollToDestinationDraft();
   }
 
   function handlePlaceSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -899,7 +907,7 @@ export function App() {
       selectStopId(savedStop.id);
       setSearchOrigin("context");
     } else {
-      selectPlace(place);
+      selectPlace(place, { revealDraft: false });
       setSearchOrigin("draft");
     }
     setDestinationMode("nearby");
@@ -2632,7 +2640,7 @@ export function App() {
               ) : null}
 
               {placeDraft ? (
-                <div className="draft-stop">
+                <div className="draft-stop" ref={destinationDraftRef}>
                   <div className="draft-map-row">
                     <Crosshair size={17} />
                     <span>
