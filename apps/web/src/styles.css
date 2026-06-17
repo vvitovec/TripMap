@@ -571,6 +571,122 @@ textarea {
   font-size: 13px;
 }
 
+.destination-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.destination-preset {
+  min-width: 0;
+  min-height: 54px;
+  border: 1px solid #d6dde5;
+  border-radius: 8px;
+  background: #fff;
+  color: #17202a;
+  padding: 8px 9px;
+  text-align: left;
+}
+
+.destination-preset strong,
+.destination-preset small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.destination-preset strong {
+  font-size: 13px;
+}
+
+.destination-preset small {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.destination-preset.active {
+  border-color: #f97316;
+  background: #fff7ed;
+}
+
+.destination-plan {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  padding: 10px;
+}
+
+.destination-plan small {
+  display: block;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.destination-plan-steps,
+.destination-plan-actions {
+  display: grid;
+  gap: 7px;
+}
+
+.destination-plan-steps {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 7px;
+}
+
+.destination-plan-steps button,
+.destination-plan-actions button {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid #f4c38b;
+  border-radius: 8px;
+  background: #fff;
+  color: #7c2d12;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.destination-plan-steps button.active {
+  border-color: #f97316;
+  background: #ffedd5;
+}
+
+.destination-plan-steps span {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffedd5;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+}
+
+.destination-plan-steps button.active span {
+  background: #f97316;
+  color: #fff;
+}
+
+.destination-plan-actions {
+  grid-template-columns: minmax(0, 1fr) 92px;
+}
+
+.destination-plan-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .nearby-groups {
   display: grid;
   gap: 12px;
@@ -1632,6 +1748,12 @@ textarea {
   }
 
   .search-origin-toggle {
+    grid-template-columns: 1fr;
+  }
+
+  .destination-presets,
+  .destination-plan-steps,
+  .destination-plan-actions {
     grid-template-columns: 1fr;
   }
 

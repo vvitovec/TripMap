@@ -36,6 +36,12 @@ type DestinationMode = "search" | "nearby" | "coordinates";
 type MemoryScope = "active" | "all";
 type SearchOrigin = "context" | "draft" | "route" | "map";
 type ShareStatus = "idle" | "copied";
+type DestinationPreset = {
+  id: string;
+  title: string;
+  hint: string;
+  steps: Array<{ label: string; query: string }>;
+};
 type QueuedPlace = {
   place: PlaceSearchResult;
   title: string;
@@ -97,6 +103,49 @@ const placeChipGroups = [
 ];
 
 const placeChips = placeChipGroups.flatMap((group) => group.chips);
+
+const destinationPresets: DestinationPreset[] = [
+  {
+    id: "weekend-base",
+    title: "Weekend base",
+    hint: "Stay, sights, food",
+    steps: [
+      { label: "Stay", query: "hotel" },
+      { label: "Sights", query: "landmark" },
+      { label: "Food", query: "restaurant" }
+    ]
+  },
+  {
+    id: "city-day",
+    title: "City day",
+    hint: "Culture, views, breaks",
+    steps: [
+      { label: "Museum", query: "museum" },
+      { label: "View", query: "viewpoint" },
+      { label: "Cafe", query: "cafe" }
+    ]
+  },
+  {
+    id: "road-leg",
+    title: "Road leg",
+    hint: "Fuel, park, see",
+    steps: [
+      { label: "Fuel", query: "fuel" },
+      { label: "Parking", query: "parking" },
+      { label: "Sights", query: "landmark" }
+    ]
+  },
+  {
+    id: "nature-loop",
+    title: "Nature loop",
+    hint: "Parks, trails, views",
+    steps: [
+      { label: "Park", query: "park" },
+      { label: "Trail", query: "trail" },
+      { label: "View", query: "viewpoint" }
+    ]
+  }
+];
 
 function mediaUrl(item: MediaItem) {
   return item.optimizedUrl ?? item.originalUrl ?? undefined;
@@ -198,6 +247,8 @@ export function App() {
   const [routeQueue, setRouteQueue] = useState<QueuedPlace[]>([]);
   const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
   const [searchOrigin, setSearchOrigin] = useState<SearchOrigin>("context");
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [activePresetStep, setActivePresetStep] = useState(0);
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<"all" | "unfiled" | string>("all");
@@ -440,6 +491,13 @@ export function App() {
     () => visiblePlaceResults.filter((place) => !queuedPlaceIds.has(place.id)).slice(0, 3),
     [queuedPlaceIds, visiblePlaceResults]
   );
+  const activePreset = useMemo(
+    () => destinationPresets.find((preset) => preset.id === activePresetId) ?? null,
+    [activePresetId]
+  );
+  const activePresetQuery = activePreset?.steps[activePresetStep]?.query ?? null;
+  const canAdvancePreset = Boolean(activePreset && activePresetStep < activePreset.steps.length - 1);
+  const canQueueTopForPreset = Boolean(topVisiblePlace && !queuedPlaceIds.has(topVisiblePlace.id));
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     routeQueue.forEach((item) => previews.set(item.place.id, item.place));
@@ -627,6 +685,8 @@ export function App() {
     setManualLat("");
     setManualLng("");
     setManualLabel("");
+    setActivePresetId(null);
+    setActivePresetStep(0);
   }
 
   function scrollToDestinationPanel() {
@@ -743,6 +803,8 @@ export function App() {
     setDestinationMode("nearby");
     setPlaceQuery(query);
     setPlaceDraft(null);
+    setActivePresetId(null);
+    setActivePresetStep(0);
   }
 
   function searchAroundDraft(query: string) {
@@ -750,7 +812,35 @@ export function App() {
     setSearchOrigin("draft");
     setDestinationMode("nearby");
     setPlaceQuery(query);
+    setActivePresetId(null);
+    setActivePresetStep(0);
     setError(null);
+  }
+
+  function startDestinationPreset(preset: DestinationPreset) {
+    setActivePresetId(preset.id);
+    setActivePresetStep(0);
+    setDestinationMode("nearby");
+    setPlaceDraft(null);
+    setPlaceQuery(preset.steps[0]?.query ?? "");
+    setError(null);
+  }
+
+  function goToPresetStep(index: number) {
+    if (!activePreset) return;
+    const step = activePreset.steps[index];
+    if (!step) return;
+    setActivePresetStep(index);
+    setDestinationMode("nearby");
+    setPlaceDraft(null);
+    setPlaceQuery(step.query);
+    setError(null);
+  }
+
+  function queueTopAndAdvancePreset() {
+    if (!topVisiblePlace) return;
+    queuePlace(topVisiblePlace);
+    if (canAdvancePreset) goToPresetStep(activePresetStep + 1);
   }
 
   function searchFromMapCenter() {
@@ -1922,6 +2012,8 @@ export function App() {
                     <input
                       value={placeQuery}
                       onChange={(event) => {
+                        setActivePresetId(null);
+                        setActivePresetStep(0);
                         setDestinationMode("search");
                         setPlaceQuery(event.target.value);
                       }}
@@ -1934,6 +2026,8 @@ export function App() {
                           setPlaceQuery("");
                           setPlaceResults([]);
                           setPlaceResultFilter("all");
+                          setActivePresetId(null);
+                          setActivePresetStep(0);
                         }}
                         type="button"
                         title="Clear search"
@@ -1942,6 +2036,56 @@ export function App() {
                       </button>
                     ) : null}
                   </div>
+                  <div className="destination-presets">
+                    {destinationPresets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        className={activePresetId === preset.id ? "destination-preset active" : "destination-preset"}
+                        onClick={() => startDestinationPreset(preset)}
+                        type="button"
+                      >
+                        <strong>{preset.title}</strong>
+                        <small>{preset.hint}</small>
+                      </button>
+                    ))}
+                  </div>
+                  {activePreset ? (
+                    <div className="destination-plan">
+                      <div>
+                        <small>Plan steps</small>
+                        <div className="destination-plan-steps">
+                          {activePreset.steps.map((step, index) => (
+                            <button
+                              key={`${activePreset.id}-${step.query}`}
+                              className={activePresetStep === index ? "active" : ""}
+                              onClick={() => goToPresetStep(index)}
+                              type="button"
+                            >
+                              <span>{index + 1}</span>
+                              {step.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="destination-plan-actions">
+                        <button
+                          onClick={queueTopAndAdvancePreset}
+                          disabled={busy || !topVisiblePlace || !canQueueTopForPreset}
+                          type="button"
+                        >
+                          <ListFilter size={13} />
+                          {canAdvancePreset ? "Queue top + next" : "Queue top"}
+                        </button>
+                        <button
+                          onClick={() => goToPresetStep(activePresetStep + 1)}
+                          disabled={busy || !canAdvancePreset}
+                          type="button"
+                        >
+                          <ChevronDown size={13} /> Next
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   {destinationMode === "nearby" ? (
                     <div className="nearby-groups">
                       {placeChipGroups.map((group) => (
@@ -1951,7 +2095,7 @@ export function App() {
                             {group.chips.map((chip) => (
                               <button
                                 key={chip.label}
-                                className={placeQuery === chip.query ? "nearby-card active" : "nearby-card"}
+                                className={placeQuery === chip.query || activePresetQuery === chip.query ? "nearby-card active" : "nearby-card"}
                                 onClick={() => searchNearbyCategory(chip.query)}
                                 type="button"
                               >
