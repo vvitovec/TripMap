@@ -554,6 +554,18 @@ export function App() {
     });
   }
 
+  function useMapCenterPin() {
+    if (!mapFocus) {
+      setError("Move the map first, then use the map center as a pin.");
+      return;
+    }
+    setDestinationMode("coordinates");
+    scrollToDestinationPanel();
+    previewMapPin(mapFocus.lat, mapFocus.lng).catch((error) =>
+      setError(error instanceof Error ? error.message : String(error))
+    );
+  }
+
   function destinationInsertionPlan() {
     const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
     let sortOrder = maxSortOrder + 1;
@@ -1418,6 +1430,14 @@ export function App() {
                 </>
               ) : (
                 <div className="coordinate-entry">
+                  <button
+                    className="wide-button subtle map-center-button"
+                    onClick={useMapCenterPin}
+                    disabled={!mapFocus || busy}
+                    type="button"
+                  >
+                    <Crosshair size={16} /> Use map center as pin
+                  </button>
                   <input
                     value={manualLabel}
                     onChange={(event) => setManualLabel(event.target.value)}
