@@ -1068,6 +1068,7 @@ textarea {
 }
 
 .draft-nearby-actions button {
+  min-width: 0;
   min-height: 34px;
   border: 1px solid #d6dde5;
   border-radius: 8px;
@@ -1078,6 +1079,13 @@ textarea {
   justify-content: center;
   gap: 6px;
   font-size: 13px;
+}
+
+.draft-nearby-actions button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .route-queue {

@@ -545,6 +545,15 @@ export function App() {
           : ["hotel", "landmark", "restaurant", "viewpoint", "park", "beach"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, mainStops.length, routeQueue.length]);
+  const draftExploreChips = useMemo(() => {
+    const queries =
+      currentTrip?.type === "road_trip"
+        ? ["fuel", "parking", "restaurant"]
+        : destinationScope === "branch"
+          ? ["landmark", "cafe", "park"]
+          : ["landmark", "restaurant", "hotel"];
+    return pickPlaceChips(queries);
+  }, [currentTrip?.type, destinationScope]);
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     routeQueue.forEach((item) => previews.set(item.place.id, item.place));
@@ -2632,15 +2641,12 @@ export function App() {
                     </span>
                   </div>
                   <div className="draft-nearby-actions">
-                    <button onClick={() => searchAroundDraft("hotel")} type="button">
-                      <Compass size={14} /> Stays nearby
-                    </button>
-                    <button onClick={() => searchAroundDraft("landmark")} type="button">
-                      <MapPin size={14} /> Sights nearby
-                    </button>
-                    <button onClick={() => searchAroundDraft("restaurant")} type="button">
-                      <Search size={14} /> Food nearby
-                    </button>
+                    {draftExploreChips.map((chip, index) => (
+                      <button key={chip.query} onClick={() => searchAroundDraft(chip.query)} type="button">
+                        {index === 0 ? <Compass size={14} /> : index === 1 ? <MapPin size={14} /> : <Search size={14} />}
+                        <span>{chip.label}</span>
+                      </button>
+                    ))}
                   </div>
                   <input
                     value={draftTitle}
