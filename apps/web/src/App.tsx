@@ -287,16 +287,15 @@ export function App() {
     if (!activeStop.branch_of) return activeStop;
     return stopById.get(activeStop.branch_of) ?? activeStop;
   }, [activeStop, stopById]);
+  const queueAnchor = useMemo(() => {
+    const lastMainStop = mainStops[mainStops.length - 1] ?? null;
+    return destinationScope === "branch" ? activeStop : routeInsertionAnchor ?? lastMainStop;
+  }, [activeStop, destinationScope, mainStops, routeInsertionAnchor]);
   const mapPreviewRoute = useMemo(() => {
     if (!mapPreviewPlaces.length) return [];
-    const lastMainStop = mainStops[mainStops.length - 1] ?? null;
-    const anchor =
-      destinationScope === "branch"
-        ? activeStop
-        : routeInsertionAnchor ?? lastMainStop;
     const previewPoints = mapPreviewPlaces.map((place) => ({ lat: place.lat, lng: place.lng }));
-    return anchor ? [{ lat: anchor.lat, lng: anchor.lng }, ...previewPoints] : previewPoints;
-  }, [activeStop, destinationScope, mainStops, mapPreviewPlaces, routeInsertionAnchor]);
+    return queueAnchor ? [{ lat: queueAnchor.lat, lng: queueAnchor.lng }, ...previewPoints] : previewPoints;
+  }, [mapPreviewPlaces, queueAnchor]);
   const routeIndexByStopId = useMemo(() => {
     const indexes = new Map<string, number>();
     orderedStops.forEach((stop, index) => indexes.set(stop.id, index));
@@ -945,6 +944,13 @@ export function App() {
     return date ? `${coordinates} · ${date}` : coordinates;
   }
 
+  function queuedLegLabel(place: PlaceSearchResult, index: number) {
+    const previous = index === 0 ? queueAnchor : routeQueue[index - 1];
+    const leg = previous ? `${formatDistance(distanceKm(previous, place))} leg` : place.category;
+    const away = placeDistanceLabel(place);
+    return away && away !== leg ? `${leg} · ${away}` : leg;
+  }
+
   function renderStopCard(stop: Stop, variant: "main" | "branch" = "main") {
     const index = routeIndexByStopId.get(stop.id) ?? 0;
     return (
@@ -1545,7 +1551,7 @@ export function App() {
                         <span>{index + 1}</span>
                         <div>
                           <strong>{place.name}</strong>
-                          <small>{placeDistanceLabel(place) ?? place.category}</small>
+                          <small>{queuedLegLabel(place, index)}</small>
                         </div>
                         <div className="queue-row-actions">
                           <button
