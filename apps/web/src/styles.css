@@ -601,6 +601,7 @@ textarea {
 }
 
 .memory-panel,
+.collab-panel,
 .note-panel {
   display: grid;
   gap: 10px;
@@ -611,9 +612,41 @@ textarea {
 }
 
 .memory-panel h3,
+.collab-panel h3,
 .note-panel h3 {
   margin: 0;
   font-size: 18px;
+}
+
+.collab-form {
+  display: grid;
+  gap: 8px;
+}
+
+.collab-list {
+  display: grid;
+  gap: 8px;
+}
+
+.collab-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #f8faf8;
+  padding: 9px 10px;
+}
+
+.collab-list strong,
+.collab-list small {
+  display: block;
+}
+
+.collab-list small {
+  margin-top: 3px;
+  color: #667085;
 }
 
 .memory-tabs {

@@ -10,6 +10,15 @@ export type Folder = {
   color: string;
 };
 
+export type Collaborator = {
+  trip_id: string;
+  user_id: string;
+  role: "viewer" | "editor";
+  email: string;
+  name: string;
+  created_at: string;
+};
+
 export type Stop = {
   id: string;
   trip_id: string;

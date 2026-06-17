@@ -18,13 +18,15 @@ import {
   Route,
   Share2,
   Trash2,
+  UserPlus,
+  Users,
   X,
   Upload
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { TripMap } from "./TripMap";
-import type { Folder, MediaItem, Note, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
+import type { Collaborator, Folder, MediaItem, Note, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
 
 type AuthMode = "login" | "register";
 type DestinationScope = "main" | "branch";
@@ -98,6 +100,9 @@ export function App() {
   const [noteDraft, setNoteDraft] = useState("");
   const [memoryScope, setMemoryScope] = useState<MemoryScope>("active");
   const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [collaboratorEmail, setCollaboratorEmail] = useState("");
+  const [collaboratorRole, setCollaboratorRole] = useState<Collaborator["role"]>("viewer");
   const [editingTrip, setEditingTrip] = useState(false);
   const [tripTitleDraft, setTripTitleDraft] = useState("");
   const [tripDescriptionDraft, setTripDescriptionDraft] = useState("");
@@ -134,6 +139,17 @@ export function App() {
       return;
     }
     api.trip(selectedTripId).then(setDetail).catch((error) => setError(error.message));
+  }, [selectedTripId, user]);
+
+  useEffect(() => {
+    if (!selectedTripId || !user) {
+      setCollaborators([]);
+      return;
+    }
+    api
+      .collaborators(selectedTripId)
+      .then(({ collaborators }) => setCollaborators(collaborators))
+      .catch((error) => setError(error.message));
   }, [selectedTripId, user]);
 
   useEffect(() => {
@@ -563,6 +579,45 @@ export function App() {
       }
       setShareStatus("copied");
       window.setTimeout(() => setShareStatus("idle"), 2400);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addCollaborator(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedTripId || !collaboratorEmail.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { collaborator } = await api.addCollaborator(
+        selectedTripId,
+        collaboratorEmail.trim(),
+        collaboratorRole
+      );
+      setCollaborators((items) => [
+        ...items.filter((item) => item.user_id !== collaborator.user_id),
+        collaborator
+      ]);
+      setCollaboratorEmail("");
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeCollaborator(userId: string) {
+    if (!selectedTripId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.removeCollaborator(selectedTripId, userId);
+      setCollaborators((items) => items.filter((item) => item.user_id !== userId));
+      await load();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1296,6 +1351,57 @@ export function App() {
               {shareStatus === "copied" ? <Check size={16} /> : <Share2 size={16} />}
               {shareStatus === "copied" ? "Copied share link" : "Copy share link"}
             </button>
+
+            <section className="collab-panel">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">Collaborate</p>
+                  <h3>Trip access</h3>
+                </div>
+                <Users size={18} />
+              </div>
+              <form className="collab-form" onSubmit={addCollaborator}>
+                <input
+                  value={collaboratorEmail}
+                  onChange={(event) => setCollaboratorEmail(event.target.value)}
+                  type="email"
+                  placeholder="Email of an existing TripMap user"
+                />
+                <select
+                  value={collaboratorRole}
+                  onChange={(event) => setCollaboratorRole(event.target.value as Collaborator["role"])}
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="editor">Editor</option>
+                </select>
+                <button className="wide-button subtle" disabled={busy || !collaboratorEmail.trim()}>
+                  <UserPlus size={16} /> Add collaborator
+                </button>
+              </form>
+              {collaborators.length ? (
+                <div className="collab-list">
+                  {collaborators.map((collaborator) => (
+                    <article key={collaborator.user_id}>
+                      <span>
+                        <strong>{collaborator.name}</strong>
+                        <small>{collaborator.email} · {collaborator.role}</small>
+                      </span>
+                      <button
+                        className="icon-button mini-button danger-button"
+                        onClick={() => removeCollaborator(collaborator.user_id)}
+                        title="Remove collaborator"
+                        type="button"
+                        disabled={busy}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">No collaborators yet. Share a link for viewing, or add an existing user here.</p>
+              )}
+            </section>
 
             <div className="timeline">
               {mainStops.length ? (

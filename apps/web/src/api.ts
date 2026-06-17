@@ -1,4 +1,4 @@
-import type { Folder, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
+import type { Collaborator, Folder, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
 
@@ -59,6 +59,17 @@ export const api = {
     }),
   trip: (id: string) => request<TripDetail>(`/trips/${id}`),
   sharedTrip: (token: string) => request<TripDetail>(`/share/${token}`),
+  collaborators: (tripId: string) =>
+    request<{ collaborators: Collaborator[] }>(`/trips/${tripId}/collaborators`),
+  addCollaborator: (tripId: string, email: string, role: Collaborator["role"]) =>
+    request<{ collaborator: Collaborator }>(`/trips/${tripId}/collaborators`, {
+      method: "POST",
+      body: JSON.stringify({ email, role })
+    }),
+  removeCollaborator: (tripId: string, userId: string) =>
+    request<{ ok: boolean }>(`/trips/${tripId}/collaborators/${userId}`, {
+      method: "DELETE"
+    }),
   searchPlaces: (query: string, near?: { lat: number; lng: number }) => {
     const params = new URLSearchParams({ q: query });
     if (near) {

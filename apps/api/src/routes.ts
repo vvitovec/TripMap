@@ -59,6 +59,11 @@ const tripUpdateSchema = tripSchema
   })
   .partial();
 
+const collaboratorSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(["viewer", "editor"])
+});
+
 const stopSchema = z.object({
   title: z.string().min(1).max(140),
   note: z.string().max(2000).default(""),
@@ -508,6 +513,83 @@ export async function registerRoutes(app: FastifyInstance) {
       ]
     );
     return { trip: rows[0] };
+  });
+
+  app.get("/trips/:id/collaborators", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id } = request.params as { id: string };
+    if (!(await canEditTrip(id, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    const { rows } = await pool.query(
+      `SELECT c.trip_id, c.user_id, c.role, c.created_at, u.email, u.name
+       FROM trip_collaborators c
+       JOIN users u ON u.id = c.user_id
+       WHERE c.trip_id = $1
+       ORDER BY c.created_at ASC`,
+      [id]
+    );
+    return { collaborators: rows };
+  });
+
+  app.post("/trips/:id/collaborators", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id } = request.params as { id: string };
+    if (!(await canEditTrip(id, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    const input = collaboratorSchema.parse(request.body);
+    const target = await pool.query<AuthUser>(
+      "SELECT id, email, name FROM users WHERE email = $1",
+      [input.email.toLowerCase()]
+    );
+    const collaborator = target.rows[0];
+    if (!collaborator) {
+      reply.code(404).send({ error: "No TripMap user found for that email" });
+      return;
+    }
+    const owner = await pool.query("SELECT owner_id FROM trips WHERE id = $1", [id]);
+    if (owner.rows[0]?.owner_id === collaborator.id) {
+      reply.code(400).send({ error: "Trip owner already has full access" });
+      return;
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO trip_collaborators (trip_id, user_id, role)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (trip_id, user_id) DO UPDATE SET role = EXCLUDED.role
+       RETURNING trip_id, user_id, role, created_at`,
+      [id, collaborator.id, input.role]
+    );
+    return {
+      collaborator: {
+        ...rows[0],
+        email: collaborator.email,
+        name: collaborator.name
+      }
+    };
+  });
+
+  app.delete("/trips/:id/collaborators/:userId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id, userId } = request.params as { id: string; userId: string };
+    if (!(await canEditTrip(id, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    const { rowCount } = await pool.query(
+      "DELETE FROM trip_collaborators WHERE trip_id = $1 AND user_id = $2",
+      [id, userId]
+    );
+    if (!rowCount) {
+      reply.code(404).send({ error: "Collaborator not found" });
+      return;
+    }
+    return { ok: true };
   });
 
   app.post("/trips/:id/stops", async (request, reply) => {
