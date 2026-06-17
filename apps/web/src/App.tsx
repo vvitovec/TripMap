@@ -33,7 +33,7 @@ type AuthMode = "login" | "register";
 type DestinationScope = "main" | "branch";
 type DestinationMode = "search" | "nearby" | "coordinates";
 type MemoryScope = "active" | "all";
-type SearchOrigin = "context" | "route" | "map";
+type SearchOrigin = "context" | "draft" | "route" | "map";
 type ShareStatus = "idle" | "copied";
 type QueuedPlace = {
   place: PlaceSearchResult;
@@ -367,18 +367,23 @@ export function App() {
         : "the map";
   const routeSearchAnchor = routeQueue[routeQueue.length - 1]?.place;
   const searchAnchor =
-    searchOrigin === "route" && routeSearchAnchor
+    searchOrigin === "draft" && placeDraft
+      ? placeDraft
+      : searchOrigin === "route" && routeSearchAnchor
       ? routeSearchAnchor
       : searchOrigin === "map" && mapFocus
         ? mapFocus
         : contextSearchAnchor;
   const searchAnchorLabel =
-    searchOrigin === "route" && routeSearchAnchor
+    searchOrigin === "draft" && placeDraft
+      ? "draft place"
+      : searchOrigin === "route" && routeSearchAnchor
       ? "route end"
       : searchOrigin === "map" && mapFocus
         ? "map center"
         : contextSearchAnchorLabel;
   const contextSearchOriginTitle = activeStop ? "Selected stop" : detail?.stops.length ? "Trip area" : "Default area";
+  const draftSearchOriginLabel = placeDraft?.name ?? "Select a result first";
   const routeSearchOriginLabel = routeSearchAnchor?.name ?? "Queue a stop first";
   const mapSearchOriginLabel = mapFocus
     ? `${mapFocus.lat.toFixed(3)}, ${mapFocus.lng.toFixed(3)}`
@@ -540,6 +545,12 @@ export function App() {
       setSearchOrigin("context");
     }
   }, [routeQueue.length, searchOrigin]);
+
+  useEffect(() => {
+    if (searchOrigin === "draft" && !placeDraft) {
+      setSearchOrigin("context");
+    }
+  }, [placeDraft, searchOrigin]);
 
   useEffect(() => {
     setPlaceResultFilter("all");
@@ -1771,6 +1782,18 @@ export function App() {
                       </span>
                     </button>
                     <button
+                      className={searchOrigin === "draft" ? "search-origin-option active" : "search-origin-option"}
+                      onClick={() => setSearchOrigin("draft")}
+                      disabled={!placeDraft}
+                      type="button"
+                    >
+                      <MapPin size={15} />
+                      <span>
+                        <strong>Draft place</strong>
+                        <small>{draftSearchOriginLabel}</small>
+                      </span>
+                    </button>
+                    <button
                       className={searchOrigin === "route" ? "search-origin-option active" : "search-origin-option"}
                       onClick={() => setSearchOrigin("route")}
                       disabled={!routeSearchAnchor}
@@ -1803,7 +1826,7 @@ export function App() {
                         setDestinationMode("search");
                         setPlaceQuery(event.target.value);
                       }}
-                      placeholder="Address, hotel, resort, landmark"
+                      placeholder="Address, hotel, landmark, coordinates"
                     />
                   </div>
                   {destinationMode === "nearby" ? (
