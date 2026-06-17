@@ -417,6 +417,10 @@ export function App() {
     return errors;
   }, [routeQueue]);
   const queuedPlaceIds = useMemo(() => new Set(routeQueue.map((item) => item.place.id)), [routeQueue]);
+  const topQueueablePlaces = useMemo(
+    () => visiblePlaceResults.filter((place) => !queuedPlaceIds.has(place.id)).slice(0, 3),
+    [queuedPlaceIds, visiblePlaceResults]
+  );
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     routeQueue.forEach((item) => previews.set(item.place.id, item.place));
@@ -855,6 +859,10 @@ export function App() {
         : [...items, { place, title: title.trim() || place.name, note, arrivedAt, departedAt }]
     );
     setSearchOrigin("route");
+  }
+
+  function queueTopVisiblePlaces() {
+    topQueueablePlaces.forEach((place) => queuePlace(place));
   }
 
   function queueDraftPlace() {
@@ -1893,6 +1901,13 @@ export function App() {
                         >
                           {queuedPlaceIds.has(topVisiblePlace.id) ? <Check size={13} /> : <ListFilter size={13} />}
                           {queuedPlaceIds.has(topVisiblePlace.id) ? "Queued" : "Queue top"}
+                        </button>
+                        <button
+                          onClick={queueTopVisiblePlaces}
+                          disabled={busy || !topQueueablePlaces.length}
+                          type="button"
+                        >
+                          <ListFilter size={13} /> {topQueueablePlaces.length ? `Queue ${topQueueablePlaces.length}` : "Queued"}
                         </button>
                       </div>
                     ) : null}
