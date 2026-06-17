@@ -22,6 +22,28 @@ type PlaceResult = {
   address?: Record<string, string>;
   namedetails?: Record<string, string>;
 };
+type PlaceSource = "nominatim" | "map" | "overpass";
+type SearchPlace = {
+  id: string;
+  name: string;
+  label: string;
+  category: string;
+  type: string;
+  lat: number;
+  lng: number;
+  importance?: number;
+  address: Record<string, string>;
+  source: PlaceSource;
+};
+type OverpassElement = {
+  type: "node" | "way" | "relation";
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat?: number; lon?: number };
+  tags?: Record<string, string>;
+};
+type OverpassTagFilter = { key: string; values?: string[] };
 
 const placeSearchCache = new Map<string, { expiresAt: number; places: unknown[] }>();
 const placeReverseCache = new Map<string, { expiresAt: number; place: unknown }>();
@@ -115,6 +137,14 @@ function placeCategory(result: PlaceResult) {
   return result.class || result.type || "place";
 }
 
+function titleize(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function viewbox(lat: number, lng: number) {
   const delta = 2.5;
   return `${lng - delta},${lat + delta},${lng + delta},${lat - delta}`;
@@ -191,6 +221,46 @@ const nearbyCategoryQueries = new Map([
   ["atms", "atm"]
 ]);
 
+const overpassCategoryTags = new Map<string, OverpassTagFilter[]>([
+  ["hotel", [{ key: "tourism", values: ["hotel"] }]],
+  ["resort", [{ key: "tourism", values: ["resort"] }]],
+  ["hostel", [{ key: "tourism", values: ["hostel"] }]],
+  ["motel", [{ key: "tourism", values: ["motel"] }]],
+  ["guest house", [{ key: "tourism", values: ["guest_house"] }]],
+  ["camp site", [{ key: "tourism", values: ["camp_site", "camp_pitch"] }]],
+  [
+    "tourist attraction",
+    [
+      { key: "tourism", values: ["attraction", "theme_park", "zoo", "aquarium"] },
+      { key: "historic" }
+    ]
+  ],
+  ["monument", [{ key: "historic", values: ["monument", "memorial"] }]],
+  ["castle", [{ key: "historic", values: ["castle"] }]],
+  ["ruins", [{ key: "historic", values: ["ruins", "archaeological_site"] }]],
+  [
+    "trail",
+    [
+      { key: "route", values: ["hiking"] },
+      { key: "tourism", values: ["trail_riding_station"] }
+    ]
+  ],
+  ["restaurant", [{ key: "amenity", values: ["restaurant"] }]],
+  ["cafe", [{ key: "amenity", values: ["cafe"] }]],
+  ["bar", [{ key: "amenity", values: ["bar", "pub"] }]],
+  ["viewpoint", [{ key: "tourism", values: ["viewpoint"] }]],
+  ["park", [{ key: "leisure", values: ["park", "nature_reserve"] }]],
+  ["museum", [{ key: "tourism", values: ["museum"] }]],
+  ["fuel", [{ key: "amenity", values: ["fuel", "charging_station"] }]],
+  ["parking", [{ key: "amenity", values: ["parking"] }]],
+  ["airport", [{ key: "aeroway", values: ["aerodrome", "terminal"] }]],
+  ["train station", [{ key: "railway", values: ["station", "halt"] }]],
+  ["beach", [{ key: "natural", values: ["beach"] }]],
+  ["supermarket", [{ key: "shop", values: ["supermarket", "convenience", "grocery"] }]],
+  ["pharmacy", [{ key: "amenity", values: ["pharmacy"] }]],
+  ["atm", [{ key: "amenity", values: ["atm"] }]]
+]);
+
 function normalizePlaceQuery(query: string) {
   return nearbyCategoryQueries.get(query.trim().toLowerCase()) ?? query.trim();
 }
@@ -214,6 +284,125 @@ async function waitForNominatimSlot() {
   const waitMs = Math.max(0, 1100 - elapsed);
   if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
   lastNominatimSearchAt = Date.now();
+}
+
+function overpassFilter(filter: OverpassTagFilter) {
+  if (!filter.values?.length) return `["${filter.key}"]`;
+  return `["${filter.key}"~"^(${filter.values.join("|")})$"]`;
+}
+
+function overpassQuery(filters: OverpassTagFilter[], lat: number, lng: number) {
+  const radiusMeters = 25_000;
+  const clauses = filters
+    .flatMap((filter) => {
+      const tag = overpassFilter(filter);
+      return [
+        `node${tag}(around:${radiusMeters},${lat},${lng});`,
+        `way${tag}(around:${radiusMeters},${lat},${lng});`,
+        `relation${tag}(around:${radiusMeters},${lat},${lng});`
+      ];
+    })
+    .join("");
+  return `[out:json][timeout:8];(${clauses});out center tags 24;`;
+}
+
+function overpassAddress(tags: Record<string, string>) {
+  const address: Record<string, string> = {};
+  const keyMap: Record<string, string> = {
+    "addr:housenumber": "house_number",
+    "addr:street": "road",
+    "addr:city": "city",
+    "addr:town": "town",
+    "addr:village": "village",
+    "addr:suburb": "suburb",
+    "addr:postcode": "postcode",
+    "addr:country": "country"
+  };
+  Object.entries(keyMap).forEach(([tagKey, addressKey]) => {
+    if (tags[tagKey]) address[addressKey] = tags[tagKey]!;
+  });
+  return address;
+}
+
+function overpassCategory(tags: Record<string, string>, filters: OverpassTagFilter[]) {
+  for (const filter of filters) {
+    const value = tags[filter.key];
+    if (value && (!filter.values || filter.values.includes(value))) {
+      return { category: filter.key, type: value };
+    }
+  }
+  return { category: "place", type: "place" };
+}
+
+function overpassName(tags: Record<string, string>, type: string) {
+  return tags.name || tags.brand || tags.operator || titleize(type || "Place");
+}
+
+function overpassLabel(name: string, tags: Record<string, string>, lat: number, lng: number) {
+  const street = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ");
+  const city = tags["addr:city"] || tags["addr:town"] || tags["addr:village"];
+  const parts = [name, street, city].filter(Boolean);
+  return parts.length > 1 ? parts.join(", ") : `${name} (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+}
+
+function normalizeOverpassPlace(element: OverpassElement, filters: OverpassTagFilter[]): SearchPlace | null {
+  const lat = element.lat ?? element.center?.lat;
+  const lng = element.lon ?? element.center?.lon;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const tags = element.tags ?? {};
+  const { category, type } = overpassCategory(tags, filters);
+  const name = overpassName(tags, type);
+  return {
+    id: `overpass-${element.type}-${element.id}`,
+    name,
+    label: overpassLabel(name, tags, lat!, lng!),
+    category,
+    type,
+    lat: lat!,
+    lng: lng!,
+    address: overpassAddress(tags),
+    source: "overpass" as const
+  };
+}
+
+async function searchOverpassPlaces(query: string, lat: number, lng: number) {
+  const filters = overpassCategoryTags.get(query);
+  if (!filters?.length) return [];
+  const response = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
+      Referer: "https://trip.vvitovec.com"
+    },
+    body: new URLSearchParams({ data: overpassQuery(filters, lat, lng) }),
+    signal: AbortSignal.timeout(10_000)
+  });
+  if (!response.ok) {
+    throw new Error(`Overpass search failed with status ${response.status}`);
+  }
+  const data = (await response.json()) as { elements?: OverpassElement[] };
+  return (data.elements ?? [])
+    .map((element) => normalizeOverpassPlace(element, filters))
+    .filter((place): place is SearchPlace => Boolean(place));
+}
+
+function placeDedupeKey(place: SearchPlace) {
+  const name = place.name.toLowerCase().replace(/\W+/g, "");
+  return `${name}:${place.lat.toFixed(4)}:${place.lng.toFixed(4)}`;
+}
+
+function mergePlaces(primary: SearchPlace[], secondary: SearchPlace[]) {
+  const seen = new Set<string>();
+  const merged: SearchPlace[] = [];
+  [...primary, ...secondary].forEach((place) => {
+    const key = placeDedupeKey(place);
+    if (seen.has(place.id) || seen.has(key)) return;
+    seen.add(place.id);
+    seen.add(key);
+    merged.push(place);
+  });
+  return merged;
 }
 
 async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
@@ -267,7 +456,7 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   if (!data.length && hasAnchor && isNearbyCategory) {
     data = await fetchSearch(false);
   }
-  const places = data
+  const nominatimPlaces: SearchPlace[] = data
     .map((result) => ({
       id: `${result.osm_type ?? "place"}-${result.osm_id ?? result.place_id}`,
       name: placeName(result),
@@ -281,6 +470,11 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
       source: "nominatim" as const
     }))
     .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
+  const overpassPlaces =
+    hasAnchor && isNearbyCategory
+      ? await searchOverpassPlaces(normalizedQuery, input.lat!, input.lng!).catch(() => [])
+      : [];
+  const places = mergePlaces(nominatimPlaces, overpassPlaces).slice(0, 24);
 
   placeSearchCache.set(cacheKey, {
     expiresAt: Date.now() + 1000 * 60 * 30,
@@ -293,7 +487,7 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   return places;
 }
 
-function normalizePlace(result: PlaceResult, source: "nominatim" | "map" = "nominatim") {
+function normalizePlace(result: PlaceResult, source: PlaceSource = "nominatim") {
   return {
     id: `${result.osm_type ?? "place"}-${result.osm_id ?? result.place_id}`,
     name: placeName(result),

@@ -195,6 +195,12 @@ function placeKindLabel(place: PlaceSearchResult) {
   return titleize(type || "Place");
 }
 
+function placeSourceLabel(place: PlaceSearchResult) {
+  if (place.source === "overpass") return "OSM POI";
+  if (place.source === "map") return "Map pin";
+  return null;
+}
+
 function toDateTimeInputValue(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -2216,6 +2222,7 @@ export function App() {
                   {visiblePlaceResults.map((place) => {
                     const areaLabel = placeAreaLabel(place);
                     const distanceLabel = placeDistanceLabel(place);
+                    const sourceLabel = placeSourceLabel(place);
                     return (
                       <article
                         key={place.id}
@@ -2227,6 +2234,7 @@ export function App() {
                             <strong>{place.name}</strong>
                             <span className="place-meta-row">
                               <span>{placeKindLabel(place)}</span>
+                              {sourceLabel ? <span>{sourceLabel}</span> : null}
                               {distanceLabel ? <span>{distanceLabel}</span> : null}
                               {areaLabel ? <span>{areaLabel}</span> : null}
                             </span>
