@@ -1,0 +1,15 @@
+{
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @tripmap/web build",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://trip-api.vvitovec.com/$1"
+    },
+    {
+      "source": "/((?!assets/|favicon.ico).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

@@ -24,7 +24,7 @@ docker compose -f infra/docker-compose.yml up --build
 
 ## Production
 
-Deployment target:
+Backend deployment target:
 
 ```text
 baller:/srv/projects/TripMap
@@ -37,3 +37,6 @@ pnpm deploy:baller
 ```
 
 The app is served on port `8327` by default.
+
+The public app is deployed on Vercel at `trip.vvitovec.com`, with `/api/*`
+rewritten to the Cloudflare Tunnel hostname `trip-api.vvitovec.com`.

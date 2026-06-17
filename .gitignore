@@ -10,3 +10,4 @@ tmp
 .turbo
 apps/web/.vite
 apps/**/tsconfig.tsbuildinfo
+.vercel
