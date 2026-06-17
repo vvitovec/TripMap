@@ -39,6 +39,8 @@ type QueuedPlace = {
   place: PlaceSearchResult;
   title: string;
   note: string;
+  arrivedAt: string;
+  departedAt: string;
 };
 
 const placeChipGroups = [
@@ -115,6 +117,20 @@ function formatDistance(km: number) {
   return `${Math.round(km)} km`;
 }
 
+function toDateTimeInputValue(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function fromDateTimeInputValue(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export function App() {
   const shareToken = location.pathname.startsWith("/share/")
     ? location.pathname.split("/share/")[1]
@@ -134,6 +150,8 @@ export function App() {
   const [placeDraft, setPlaceDraft] = useState<PlaceSearchResult | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
+  const [draftArrivedAt, setDraftArrivedAt] = useState("");
+  const [draftDepartedAt, setDraftDepartedAt] = useState("");
   const [destinationMode, setDestinationMode] = useState<DestinationMode>("search");
   const [destinationScope, setDestinationScope] = useState<DestinationScope>("main");
   const [manualLat, setManualLat] = useState("");
@@ -163,6 +181,8 @@ export function App() {
   const [editingStop, setEditingStop] = useState(false);
   const [stopTitleDraft, setStopTitleDraft] = useState("");
   const [stopNoteDraft, setStopNoteDraft] = useState("");
+  const [stopArrivedAtDraft, setStopArrivedAtDraft] = useState("");
+  const [stopDepartedAtDraft, setStopDepartedAtDraft] = useState("");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -461,6 +481,8 @@ export function App() {
     if (!activeStop || editingStop) return;
     setStopTitleDraft(activeStop.title);
     setStopNoteDraft(activeStop.note ?? "");
+    setStopArrivedAtDraft(toDateTimeInputValue(activeStop.arrived_at));
+    setStopDepartedAtDraft(toDateTimeInputValue(activeStop.departed_at));
   }, [activeStop, editingStop]);
 
   useEffect(() => {
@@ -495,6 +517,8 @@ export function App() {
     setPlaceDraft(null);
     setDraftTitle("");
     setDraftNote("");
+    setDraftArrivedAt("");
+    setDraftDepartedAt("");
     setDestinationScope("main");
     setManualLat("");
     setManualLng("");
@@ -694,7 +718,13 @@ export function App() {
     }
   }
 
-  async function addPlaceToRoute(place: PlaceSearchResult, title: string, note: string) {
+  async function addPlaceToRoute(
+    place: PlaceSearchResult,
+    title: string,
+    note: string,
+    arrivedAt = "",
+    departedAt = ""
+  ) {
     if (!selectedTripId) return;
     setBusy(true);
     setError(null);
@@ -707,6 +737,8 @@ export function App() {
         lat: place.lat,
         lng: place.lng,
         sortOrder,
+        arrivedAt: fromDateTimeInputValue(arrivedAt),
+        departedAt: fromDateTimeInputValue(departedAt),
         branchOf: branchParent ? branchParent.id : null
       });
       setDetail(await api.trip(selectedTripId));
@@ -722,25 +754,25 @@ export function App() {
 
   async function addStopFromDraft() {
     if (!placeDraft) return;
-    await addPlaceToRoute(placeDraft, draftTitle, draftNote);
+    await addPlaceToRoute(placeDraft, draftTitle, draftNote, draftArrivedAt, draftDepartedAt);
   }
 
-  function queuePlace(place: PlaceSearchResult, title = place.name, note = "") {
+  function queuePlace(place: PlaceSearchResult, title = place.name, note = "", arrivedAt = "", departedAt = "") {
     setRouteQueue((items) =>
       items.some((item) => item.place.id === place.id)
         ? items.map((item) =>
             item.place.id === place.id
-              ? { ...item, title: title.trim() || place.name, note }
+              ? { ...item, title: title.trim() || place.name, note, arrivedAt, departedAt }
               : item
           )
-        : [...items, { place, title: title.trim() || place.name, note }]
+        : [...items, { place, title: title.trim() || place.name, note, arrivedAt, departedAt }]
     );
     setSearchOrigin("route");
   }
 
   function queueDraftPlace() {
     if (!placeDraft) return;
-    queuePlace(placeDraft, draftTitle, draftNote);
+    queuePlace(placeDraft, draftTitle, draftNote, draftArrivedAt, draftDepartedAt);
     resetDestinationDraft();
   }
 
@@ -761,7 +793,7 @@ export function App() {
     });
   }
 
-  function updateQueuedPlace(placeId: string, input: Partial<Pick<QueuedPlace, "title" | "note">>) {
+  function updateQueuedPlace(placeId: string, input: Partial<Omit<QueuedPlace, "place">>) {
     setRouteQueue((items) =>
       items.map((item) => (item.place.id === placeId ? { ...item, ...input } : item))
     );
@@ -806,6 +838,8 @@ export function App() {
           lat: place.lat,
           lng: place.lng,
           sortOrder: sortOrder + index,
+          arrivedAt: fromDateTimeInputValue(item.arrivedAt),
+          departedAt: fromDateTimeInputValue(item.departedAt),
           branchOf: branchParent ? branchParent.id : null
         });
         created.push(stop);
@@ -972,7 +1006,9 @@ export function App() {
     try {
       await api.updateStop(selectedTripId, activeStop.id, {
         title: stopTitleDraft.trim() || activeStop.title,
-        note: stopNoteDraft.trim()
+        note: stopNoteDraft.trim(),
+        arrivedAt: fromDateTimeInputValue(stopArrivedAtDraft),
+        departedAt: fromDateTimeInputValue(stopDepartedAtDraft)
       });
       setEditingStop(false);
       setDetail(await api.trip(selectedTripId));
@@ -1027,9 +1063,27 @@ export function App() {
     const media = stopMediaCounts.get(stop.id) ?? 0;
     const notes = stopNoteCounts.get(stop.id) ?? 0;
     const bits = [`${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}`];
+    const timing = stopTimingLabel(stop);
+    if (timing) bits.unshift(timing);
     if (media) bits.push(`${media} media`);
     if (notes) bits.push(`${notes} notes`);
     return bits.join(" · ");
+  }
+
+  function formatStopDateTime(value?: string | null) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function stopTimingLabel(stop: Stop) {
+    const arrived = formatStopDateTime(stop.arrived_at);
+    const departed = formatStopDateTime(stop.departed_at);
+    if (arrived && departed) return `${arrived} to ${departed}`;
+    if (arrived) return `Arrive ${arrived}`;
+    if (departed) return `Leave ${departed}`;
+    return null;
   }
 
   function branchParentTitle(stop: Stop) {
@@ -1427,6 +1481,8 @@ export function App() {
                       onClick={() => {
                         setStopTitleDraft(activeStop.title);
                         setStopNoteDraft(activeStop.note ?? "");
+                        setStopArrivedAtDraft(toDateTimeInputValue(activeStop.arrived_at));
+                        setStopDepartedAtDraft(toDateTimeInputValue(activeStop.departed_at));
                         setEditingStop(true);
                       }}
                       title="Edit stop"
@@ -1458,6 +1514,24 @@ export function App() {
                       placeholder="Private stop note"
                       rows={3}
                     />
+                    <div className="time-row">
+                      <label>
+                        <span>Arrive</span>
+                        <input
+                          type="datetime-local"
+                          value={stopArrivedAtDraft}
+                          onChange={(event) => setStopArrivedAtDraft(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Leave</span>
+                        <input
+                          type="datetime-local"
+                          value={stopDepartedAtDraft}
+                          onChange={(event) => setStopDepartedAtDraft(event.target.value)}
+                        />
+                      </label>
+                    </div>
                     <div className="editor-actions">
                       <button className="wide-button" onClick={saveActiveStop} disabled={busy} type="button">
                         <Check size={16} /> Save
@@ -1468,6 +1542,8 @@ export function App() {
                           setEditingStop(false);
                           setStopTitleDraft(activeStop.title);
                           setStopNoteDraft(activeStop.note ?? "");
+                          setStopArrivedAtDraft(toDateTimeInputValue(activeStop.arrived_at));
+                          setStopDepartedAtDraft(toDateTimeInputValue(activeStop.departed_at));
                         }}
                         type="button"
                       >
@@ -1742,6 +1818,24 @@ export function App() {
                             placeholder="Short note"
                             rows={2}
                           />
+                          <div className="time-row">
+                            <label>
+                              <span>Arrive</span>
+                              <input
+                                type="datetime-local"
+                                value={item.arrivedAt}
+                                onChange={(event) => updateQueuedPlace(item.place.id, { arrivedAt: event.target.value })}
+                              />
+                            </label>
+                            <label>
+                              <span>Leave</span>
+                              <input
+                                type="datetime-local"
+                                value={item.departedAt}
+                                onChange={(event) => updateQueuedPlace(item.place.id, { departedAt: event.target.value })}
+                              />
+                            </label>
+                          </div>
                         </div>
                         <div className="queue-row-actions">
                           <button
@@ -1806,6 +1900,24 @@ export function App() {
                     placeholder="Short note"
                     rows={3}
                   />
+                  <div className="time-row">
+                    <label>
+                      <span>Arrive</span>
+                      <input
+                        type="datetime-local"
+                        value={draftArrivedAt}
+                        onChange={(event) => setDraftArrivedAt(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Leave</span>
+                      <input
+                        type="datetime-local"
+                        value={draftDepartedAt}
+                        onChange={(event) => setDraftDepartedAt(event.target.value)}
+                      />
+                    </label>
+                  </div>
                   <div className="scope-toggle">
                     <button
                       className={destinationScope === "main" ? "scope-option active" : "scope-option"}

@@ -95,6 +95,8 @@ export const api = {
       lat: number;
       lng: number;
       sortOrder: number;
+      arrivedAt?: string | null;
+      departedAt?: string | null;
       branchOf?: string | null;
     }
   ) =>
@@ -111,6 +113,8 @@ export const api = {
       lat: number;
       lng: number;
       sortOrder: number;
+      arrivedAt: string | null;
+      departedAt: string | null;
       branchOf: string | null;
     }>
   ) =>

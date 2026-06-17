@@ -774,6 +774,28 @@ textarea {
   resize: vertical;
 }
 
+.time-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.time-row label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.time-row span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.time-row input {
+  min-width: 0;
+}
+
 .queue-row-actions {
   display: grid;
   grid-auto-flow: column;
@@ -1422,6 +1444,10 @@ textarea {
 
   .draft-actions {
     grid-template-columns: minmax(0, 1fr) 42px;
+  }
+
+  .time-row {
+    grid-template-columns: 1fr;
   }
 
   .draft-actions .wide-button:first-child {
