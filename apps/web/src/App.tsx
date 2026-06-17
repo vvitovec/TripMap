@@ -24,7 +24,7 @@ import {
   X,
   Upload
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { TripMap } from "./TripMap";
 import type { Collaborator, Folder, MediaItem, Note, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
@@ -77,6 +77,7 @@ export function App() {
   const shareToken = location.pathname.startsWith("/share/")
     ? location.pathname.split("/share/")[1]
     : null;
+  const destinationPanelRef = useRef<HTMLElement | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -401,6 +402,20 @@ export function App() {
     setManualLabel("");
   }
 
+  function scrollToDestinationPanel() {
+    window.requestAnimationFrame(() => {
+      destinationPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function openDestinationMode(mode: DestinationMode) {
+    resetDestinationDraft();
+    setPlaceQuery("");
+    setDestinationMode(mode);
+    setError(null);
+    scrollToDestinationPanel();
+  }
+
   async function handleAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -481,6 +496,16 @@ export function App() {
     setDestinationMode("nearby");
     setPlaceQuery(query);
     setPlaceDraft(null);
+  }
+
+  function prepareDestinationFromStop(stop: Stop, scope: DestinationScope) {
+    selectStopId(stop.id);
+    resetDestinationDraft();
+    setDestinationScope(scope);
+    setDestinationMode("nearby");
+    setPlaceQuery("");
+    setError(null);
+    scrollToDestinationPanel();
   }
 
   function useManualCoordinates() {
@@ -814,6 +839,16 @@ export function App() {
             <ChevronDown size={15} />
           </button>
         </div>
+        {variant === "main" ? (
+          <div className="stop-quick-actions">
+            <button onClick={() => prepareDestinationFromStop(stop, "main")} disabled={busy} type="button">
+              <Plus size={14} /> Add after
+            </button>
+            <button onClick={() => prepareDestinationFromStop(stop, "branch")} disabled={busy} type="button">
+              <GitBranch size={14} /> Side trip
+            </button>
+          </div>
+        ) : null}
       </article>
     );
   }
@@ -1192,7 +1227,7 @@ export function App() {
               </section>
             )}
 
-            <section className="place-workflow">
+            <section className="place-workflow" ref={destinationPanelRef}>
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">Add destination</p>
@@ -1540,7 +1575,24 @@ export function App() {
                   );
                 })
               ) : (
-                <p className="muted">Add a destination to start the route.</p>
+                <section className="route-empty-state">
+                  <MapPin size={20} />
+                  <div>
+                    <strong>Start the route with a destination</strong>
+                    <small>Search an address or place, browse nearby ideas, or drop an exact pin on the satellite map.</small>
+                  </div>
+                  <div className="route-empty-actions">
+                    <button onClick={() => openDestinationMode("search")} type="button">
+                      <Search size={14} /> Search
+                    </button>
+                    <button onClick={() => openDestinationMode("nearby")} type="button">
+                      <Compass size={14} /> Nearby
+                    </button>
+                    <button onClick={() => openDestinationMode("coordinates")} type="button">
+                      <Crosshair size={14} /> Pin
+                    </button>
+                  </div>
+                </section>
               )}
               {orphanBranchStops.length ? (
                 <section className="route-stop-group">
