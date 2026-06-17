@@ -49,6 +49,9 @@ const placeChipGroups = [
     chips: [
       { label: "Hotels", query: "hotel", hint: "Rooms" },
       { label: "Resorts", query: "resort", hint: "Getaways" },
+      { label: "Hostels", query: "hostel", hint: "Budget" },
+      { label: "Motels", query: "motel", hint: "Roadside" },
+      { label: "Guesthouses", query: "guesthouse", hint: "Local stays" },
       { label: "Campsites", query: "campsite", hint: "Outdoors" }
     ]
   },
@@ -59,7 +62,10 @@ const placeChipGroups = [
       { label: "Viewpoints", query: "viewpoint", hint: "Views" },
       { label: "Museums", query: "museum", hint: "Culture" },
       { label: "Parks", query: "park", hint: "Outdoors" },
-      { label: "Beaches", query: "beach", hint: "Coast" }
+      { label: "Beaches", query: "beach", hint: "Coast" },
+      { label: "Monuments", query: "monument", hint: "Icons" },
+      { label: "Castles", query: "castle", hint: "Historic" },
+      { label: "Trails", query: "trail", hint: "Walks" }
     ]
   },
   {
