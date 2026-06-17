@@ -10,6 +10,7 @@ type Props = {
   onSelectTrip: (id: string) => void;
   onSelectStop?: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
+  onViewChange?: (center: { lat: number; lng: number }) => void;
 };
 
 export function TripMap({
@@ -19,7 +20,8 @@ export function TripMap({
   previewPlace,
   onSelectTrip,
   onSelectStop,
-  onMapClick
+  onMapClick,
+  onViewChange
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -127,7 +129,13 @@ export function TripMap({
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: true }), "top-right");
 
+    const reportCenter = () => {
+      const center = map.getCenter();
+      onViewChange?.({ lat: center.lat, lng: center.lng });
+    };
+
     map.on("load", () => {
+      reportCenter();
       map.addSource("trips", { type: "geojson", data: geojson });
       map.addLayer({
         id: "trip-lines",
@@ -212,6 +220,7 @@ export function TripMap({
       const features = map.queryRenderedFeatures(event.point, { layers: ["trip-points"] });
       if (features.length === 0) onMapClick(event.lngLat.lat, event.lngLat.lng);
     });
+    map.on("moveend", reportCenter);
 
     mapRef.current = map;
     return () => map.remove();

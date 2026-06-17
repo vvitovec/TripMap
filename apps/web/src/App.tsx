@@ -98,6 +98,7 @@ export function App() {
   const [manualLng, setManualLng] = useState("");
   const [manualLabel, setManualLabel] = useState("");
   const [routeQueue, setRouteQueue] = useState<PlaceSearchResult[]>([]);
+  const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<"all" | "unfiled" | string>("all");
@@ -260,14 +261,16 @@ export function App() {
     };
   }, [currentTrip?.stops, detail?.stops]);
   const searchAnchor = useMemo(
-    () => (activeStop ? { lat: activeStop.lat, lng: activeStop.lng } : tripCenter),
-    [activeStop, tripCenter]
+    () => (activeStop ? { lat: activeStop.lat, lng: activeStop.lng } : tripCenter ?? mapFocus ?? undefined),
+    [activeStop, mapFocus, tripCenter]
   );
   const searchAnchorLabel = activeStop
     ? activeStop.title
     : detail?.stops.length
       ? detail.trip.title
-      : "the map";
+      : mapFocus
+        ? "map center"
+        : "the map";
   const rankedPlaceResults = useMemo(() => {
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
@@ -1174,6 +1177,7 @@ export function App() {
           onSelectTrip={selectTripId}
           onSelectStop={selectStopId}
           onMapClick={previewMapPin}
+          onViewChange={setMapFocus}
         />
       </section>
 
