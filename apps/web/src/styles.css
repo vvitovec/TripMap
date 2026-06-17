@@ -1191,6 +1191,26 @@ textarea {
   opacity: 0.45;
 }
 
+.branch-parent-select {
+  display: grid;
+  gap: 5px;
+}
+
+.branch-parent-select span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.branch-parent-select select {
+  min-height: 38px;
+  border: 1px solid #d6dde5;
+  border-radius: 8px;
+  background: #fff;
+  color: #17202a;
+  padding: 0 10px;
+}
+
 .draft-hint {
   color: #276749;
 }

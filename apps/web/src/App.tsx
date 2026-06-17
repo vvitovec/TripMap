@@ -251,6 +251,7 @@ export function App() {
   const [draftDepartedAt, setDraftDepartedAt] = useState("");
   const [destinationMode, setDestinationMode] = useState<DestinationMode>("search");
   const [destinationScope, setDestinationScope] = useState<DestinationScope>("main");
+  const [destinationBranchParentId, setDestinationBranchParentId] = useState("");
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [manualLabel, setManualLabel] = useState("");
@@ -520,10 +521,18 @@ export function App() {
     if (!activeStop.branch_of) return activeStop;
     return stopById.get(activeStop.branch_of) ?? activeStop;
   }, [activeStop, stopById]);
+  const destinationBranchParent = useMemo(
+    () =>
+      mainStops.find((stop) => stop.id === destinationBranchParentId) ??
+      routeInsertionAnchor ??
+      mainStops[0] ??
+      null,
+    [destinationBranchParentId, mainStops, routeInsertionAnchor]
+  );
   const queueAnchor = useMemo(() => {
     const lastMainStop = mainStops[mainStops.length - 1] ?? null;
-    return destinationScope === "branch" ? activeStop : routeInsertionAnchor ?? lastMainStop;
-  }, [activeStop, destinationScope, mainStops, routeInsertionAnchor]);
+    return destinationScope === "branch" ? destinationBranchParent : routeInsertionAnchor ?? lastMainStop;
+  }, [destinationBranchParent, destinationScope, mainStops, routeInsertionAnchor]);
   const mapPreviewRoute = useMemo(() => {
     if (!mapPreviewPlaces.length) return [];
     const previewPoints = mapPreviewPlaces.map((place) => ({ lat: place.lat, lng: place.lng }));
@@ -614,10 +623,10 @@ export function App() {
   }, [detail]);
 
   useEffect(() => {
-    if (!activeStop && destinationScope === "branch") {
+    if (destinationScope === "branch" && !destinationBranchParent) {
       setDestinationScope("main");
     }
-  }, [activeStop, destinationScope]);
+  }, [destinationBranchParent, destinationScope]);
 
   useEffect(() => {
     if (!activeStop && memoryScope === "active") {
@@ -693,6 +702,7 @@ export function App() {
     setDraftArrivedAt("");
     setDraftDepartedAt("");
     setDestinationScope("main");
+    setDestinationBranchParentId("");
     setManualLat("");
     setManualLng("");
     setManualLabel("");
@@ -797,6 +807,7 @@ export function App() {
     setManualLabel(place.name);
     if (activeStop && currentTrip?.type === "one_destination") {
       setDestinationScope("branch");
+      setDestinationBranchParentId(routeInsertionAnchor?.id ?? activeStop.id);
     }
   }
 
@@ -866,6 +877,7 @@ export function App() {
   function prepareDestinationFromStop(stop: Stop, scope: DestinationScope, mode: DestinationMode = "nearby", query = "") {
     selectStopId(stop.id);
     resetDestinationDraft();
+    if (scope === "branch") setDestinationBranchParentId(stop.branch_of ? stop.branch_of : stop.id);
     setDestinationScope(scope);
     setDestinationMode(mode);
     setSearchOrigin("context");
@@ -910,7 +922,7 @@ export function App() {
   function destinationInsertionPlan() {
     const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
     let sortOrder = maxSortOrder + 1;
-    const branchParent = destinationScope === "branch" ? activeStop : null;
+    const branchParent = destinationScope === "branch" ? destinationBranchParent : null;
     if (destinationScope === "main" && routeInsertionAnchor) {
       sortOrder = routeInsertionAnchor.sort_order + 1;
     }
@@ -1417,7 +1429,7 @@ export function App() {
   }
 
   function destinationPlacementLabel() {
-    if (destinationScope === "branch" && activeStop) return `Side trip from ${activeStop.title}`;
+    if (destinationScope === "branch" && destinationBranchParent) return `Side trip from ${destinationBranchParent.title}`;
     if (destinationScope === "main" && routeInsertionAnchor) return `Main route after ${routeInsertionAnchor.title}`;
     return "Main route at the end";
   }
@@ -2485,13 +2497,31 @@ export function App() {
                     </button>
                     <button
                       className={destinationScope === "branch" ? "scope-option active" : "scope-option"}
-                      onClick={() => setDestinationScope("branch")}
-                      disabled={!activeStop}
+                      onClick={() => {
+                        setDestinationBranchParentId(destinationBranchParent?.id ?? mainStops[0]?.id ?? "");
+                        setDestinationScope("branch");
+                      }}
+                      disabled={!mainStops.length}
                       type="button"
                     >
                       <GitBranch size={15} /> Side trip
                     </button>
                   </div>
+                  {destinationScope === "branch" && mainStops.length ? (
+                    <label className="branch-parent-select">
+                      <span>Side trip from</span>
+                      <select
+                        value={destinationBranchParent?.id ?? ""}
+                        onChange={(event) => setDestinationBranchParentId(event.target.value)}
+                      >
+                        {mainStops.map((stop) => (
+                          <option key={stop.id} value={stop.id}>
+                            {stop.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <small className="draft-hint">{destinationPlacementLabel()}</small>
                   <div className="draft-actions">
                     <button className="wide-button" onClick={addStopFromDraft} disabled={busy || Boolean(draftTimeError)}>
