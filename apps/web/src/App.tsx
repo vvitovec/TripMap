@@ -134,6 +134,11 @@ function firstAddressPart(address: PlaceSearchResult["address"] | undefined, key
   return null;
 }
 
+function placeKindLabel(place: PlaceSearchResult) {
+  const type = place.type && place.type !== "yes" ? place.type : place.category;
+  return titleize(type || "Place");
+}
+
 function toDateTimeInputValue(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -172,6 +177,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [placeQuery, setPlaceQuery] = useState("");
   const [placeResults, setPlaceResults] = useState<PlaceSearchResult[]>([]);
+  const [placeResultFilter, setPlaceResultFilter] = useState("all");
   const [placeDraft, setPlaceDraft] = useState<PlaceSearchResult | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
@@ -381,6 +387,24 @@ export function App() {
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
   }, [placeResults, searchAnchor]);
+  const placeResultFilters = useMemo(() => {
+    const counts = new Map<string, number>();
+    rankedPlaceResults.forEach((place) => {
+      const label = placeKindLabel(place);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    });
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 6)
+      .map(([label, count]) => ({ label, count }));
+  }, [rankedPlaceResults]);
+  const visiblePlaceResults = useMemo(
+    () =>
+      placeResultFilter === "all"
+        ? rankedPlaceResults
+        : rankedPlaceResults.filter((place) => placeKindLabel(place) === placeResultFilter),
+    [placeResultFilter, rankedPlaceResults]
+  );
   const draftTimeError = timeRangeError(draftArrivedAt, draftDepartedAt);
   const stopTimeError = timeRangeError(stopArrivedAtDraft, stopDepartedAtDraft);
   const queuedTimeErrors = useMemo(() => {
@@ -511,6 +535,19 @@ export function App() {
       setSearchOrigin("context");
     }
   }, [routeQueue.length, searchOrigin]);
+
+  useEffect(() => {
+    setPlaceResultFilter("all");
+  }, [placeQuery, searchOrigin]);
+
+  useEffect(() => {
+    if (
+      placeResultFilter !== "all" &&
+      !placeResultFilters.some((filter) => filter.label === placeResultFilter)
+    ) {
+      setPlaceResultFilter("all");
+    }
+  }, [placeResultFilter, placeResultFilters]);
 
   useEffect(() => {
     if (!activeStop || editingStop) return;
@@ -1155,11 +1192,6 @@ export function App() {
   function placeDistanceLabel(place: PlaceSearchResult) {
     if (!searchAnchor) return null;
     return `${formatDistance(distanceKm(searchAnchor, place))} away`;
-  }
-
-  function placeKindLabel(place: PlaceSearchResult) {
-    const type = place.type && place.type !== "yes" ? place.type : place.category;
-    return titleize(type || "Place");
   }
 
   function placeAreaLabel(place: PlaceSearchResult) {
@@ -1838,10 +1870,33 @@ export function App() {
               {rankedPlaceResults.length > 0 && destinationMode !== "coordinates" ? (
                 <div className="place-results">
                   <div className="place-results-summary">
-                    <strong>{rankedPlaceResults.length} result{rankedPlaceResults.length === 1 ? "" : "s"}</strong>
+                    <strong>
+                      {visiblePlaceResults.length} of {rankedPlaceResults.length} result{rankedPlaceResults.length === 1 ? "" : "s"}
+                    </strong>
                     <small>Nearest first near {searchAnchorLabel}</small>
                   </div>
-                  {rankedPlaceResults.map((place) => {
+                  {placeResultFilters.length > 1 ? (
+                    <div className="place-result-filters">
+                      <button
+                        className={placeResultFilter === "all" ? "active" : ""}
+                        onClick={() => setPlaceResultFilter("all")}
+                        type="button"
+                      >
+                        All <span>{rankedPlaceResults.length}</span>
+                      </button>
+                      {placeResultFilters.map((filter) => (
+                        <button
+                          key={filter.label}
+                          className={placeResultFilter === filter.label ? "active" : ""}
+                          onClick={() => setPlaceResultFilter(filter.label)}
+                          type="button"
+                        >
+                          {filter.label} <span>{filter.count}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {visiblePlaceResults.map((place) => {
                     const areaLabel = placeAreaLabel(place);
                     const distanceLabel = placeDistanceLabel(place);
                     return (
