@@ -131,6 +131,14 @@ function fromDateTimeInputValue(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function timeRangeError(arrivedAt: string, departedAt: string) {
+  if (!arrivedAt || !departedAt) return null;
+  const arrived = new Date(arrivedAt).getTime();
+  const departed = new Date(departedAt).getTime();
+  if (Number.isNaN(arrived) || Number.isNaN(departed)) return null;
+  return departed < arrived ? "Leave time must be after arrive time." : null;
+}
+
 export function App() {
   const shareToken = location.pathname.startsWith("/share/")
     ? location.pathname.split("/share/")[1]
@@ -356,6 +364,16 @@ export function App() {
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
   }, [placeResults, searchAnchor]);
+  const draftTimeError = timeRangeError(draftArrivedAt, draftDepartedAt);
+  const stopTimeError = timeRangeError(stopArrivedAtDraft, stopDepartedAtDraft);
+  const queuedTimeErrors = useMemo(() => {
+    const errors = new Map<string, string>();
+    routeQueue.forEach((item) => {
+      const error = timeRangeError(item.arrivedAt, item.departedAt);
+      if (error) errors.set(item.place.id, error);
+    });
+    return errors;
+  }, [routeQueue]);
   const queuedPlaceIds = useMemo(() => new Set(routeQueue.map((item) => item.place.id)), [routeQueue]);
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
@@ -726,6 +744,11 @@ export function App() {
     departedAt = ""
   ) {
     if (!selectedTripId) return;
+    const timingError = timeRangeError(arrivedAt, departedAt);
+    if (timingError) {
+      setError(timingError);
+      return;
+    }
     setBusy(true);
     setError(null);
     const { sortOrder, branchParent } = destinationInsertionPlan();
@@ -772,6 +795,10 @@ export function App() {
 
   function queueDraftPlace() {
     if (!placeDraft) return;
+    if (draftTimeError) {
+      setError(draftTimeError);
+      return;
+    }
     queuePlace(placeDraft, draftTitle, draftNote, draftArrivedAt, draftDepartedAt);
     resetDestinationDraft();
   }
@@ -824,6 +851,10 @@ export function App() {
 
   async function addQueuedPlaces() {
     if (!selectedTripId || !routeQueue.length) return;
+    if (queuedTimeErrors.size) {
+      setError("Fix queued destination times before adding them to the route.");
+      return;
+    }
     setBusy(true);
     setError(null);
     const { sortOrder, branchParent } = destinationInsertionPlan();
@@ -1002,6 +1033,10 @@ export function App() {
 
   async function saveActiveStop() {
     if (!selectedTripId || !activeStop) return;
+    if (stopTimeError) {
+      setError(stopTimeError);
+      return;
+    }
     setBusy(true);
     try {
       await api.updateStop(selectedTripId, activeStop.id, {
@@ -1532,8 +1567,9 @@ export function App() {
                         />
                       </label>
                     </div>
+                    {stopTimeError ? <small className="field-error">{stopTimeError}</small> : null}
                     <div className="editor-actions">
-                      <button className="wide-button" onClick={saveActiveStop} disabled={busy} type="button">
+                      <button className="wide-button" onClick={saveActiveStop} disabled={busy || Boolean(stopTimeError)} type="button">
                         <Check size={16} /> Save
                       </button>
                       <button
@@ -1836,6 +1872,9 @@ export function App() {
                               />
                             </label>
                           </div>
+                          {queuedTimeErrors.get(item.place.id) ? (
+                            <small className="field-error">{queuedTimeErrors.get(item.place.id)}</small>
+                          ) : null}
                         </div>
                         <div className="queue-row-actions">
                           <button
@@ -1862,7 +1901,7 @@ export function App() {
                     ))}
                   </div>
                   <div className="route-queue-actions">
-                    <button className="wide-button" onClick={addQueuedPlaces} disabled={busy}>
+                    <button className="wide-button" onClick={addQueuedPlaces} disabled={busy || Boolean(queuedTimeErrors.size)}>
                       <Plus size={16} /> Add all to route
                     </button>
                     <button
@@ -1918,6 +1957,7 @@ export function App() {
                       />
                     </label>
                   </div>
+                  {draftTimeError ? <small className="field-error">{draftTimeError}</small> : null}
                   <div className="scope-toggle">
                     <button
                       className={destinationScope === "main" ? "scope-option active" : "scope-option"}
@@ -1937,10 +1977,10 @@ export function App() {
                   </div>
                   <small className="draft-hint">{destinationPlacementLabel()}</small>
                   <div className="draft-actions">
-                    <button className="wide-button" onClick={addStopFromDraft} disabled={busy}>
+                    <button className="wide-button" onClick={addStopFromDraft} disabled={busy || Boolean(draftTimeError)}>
                       <Check size={16} /> {destinationScope === "branch" ? "Add side trip" : "Add stop"}
                     </button>
-                    <button className="wide-button subtle" onClick={queueDraftPlace} disabled={busy} type="button">
+                    <button className="wide-button subtle" onClick={queueDraftPlace} disabled={busy || Boolean(draftTimeError)} type="button">
                       <ListFilter size={16} /> Queue
                     </button>
                     <button
