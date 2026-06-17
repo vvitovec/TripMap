@@ -1,0 +1,146 @@
+import maplibregl from "maplibre-gl";
+import { useEffect, useMemo, useRef } from "react";
+import type { Trip } from "./types";
+
+type Props = {
+  trips: Trip[];
+  selectedTripId: string | null;
+  onSelectTrip: (id: string) => void;
+  onAddStop: (lat: number, lng: number) => void;
+};
+
+export function TripMap({ trips, selectedTripId, onSelectTrip, onAddStop }: Props) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+
+  const geojson = useMemo(() => {
+    const pointFeatures = trips.flatMap((trip) =>
+      trip.stops.map((stop) => ({
+        type: "Feature" as const,
+        properties: {
+          tripId: trip.id,
+          title: stop.title,
+          tripTitle: trip.title,
+          selected: trip.id === selectedTripId
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [stop.lng, stop.lat]
+        }
+      }))
+    );
+    const lineFeatures = trips
+      .filter((trip) => trip.type === "road_trip" && trip.stops.length > 1)
+      .map((trip) => ({
+        type: "Feature" as const,
+        properties: { tripId: trip.id, selected: trip.id === selectedTripId },
+        geometry: {
+          type: "LineString" as const,
+          coordinates: trip.stops.map((stop) => [stop.lng, stop.lat])
+        }
+      }));
+    return {
+      type: "FeatureCollection" as const,
+      features: [...lineFeatures, ...pointFeatures]
+    };
+  }, [selectedTripId, trips]);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      center: [14.43, 50.08],
+      zoom: 4,
+      style: {
+        version: 8,
+        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+        sources: {
+          satellite: {
+            type: "raster",
+            tiles: [
+              "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg"
+            ],
+            tileSize: 256,
+            attribution: "Sentinel-2 cloudless - EOX"
+          }
+        },
+        layers: [{ id: "satellite", type: "raster", source: "satellite" }]
+      }
+    });
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: true }), "top-right");
+
+    map.on("load", () => {
+      map.addSource("trips", { type: "geojson", data: geojson });
+      map.addLayer({
+        id: "trip-lines",
+        type: "line",
+        source: "trips",
+        filter: ["==", "$type", "LineString"],
+        paint: {
+          "line-width": ["case", ["get", "selected"], 5, 3],
+          "line-color": ["case", ["get", "selected"], "#f97316", "#38bdf8"],
+          "line-opacity": 0.88
+        }
+      });
+      map.addLayer({
+        id: "trip-points",
+        type: "circle",
+        source: "trips",
+        filter: ["==", "$type", "Point"],
+        paint: {
+          "circle-radius": ["case", ["get", "selected"], 10, 7],
+          "circle-color": ["case", ["get", "selected"], "#f97316", "#f8fafc"],
+          "circle-stroke-color": "#0f172a",
+          "circle-stroke-width": 2
+        }
+      });
+      map.addLayer({
+        id: "trip-labels",
+        type: "symbol",
+        source: "trips",
+        filter: ["==", "$type", "Point"],
+        layout: {
+          "text-field": ["get", "title"],
+          "text-size": 12,
+          "text-offset": [0, 1.35],
+          "text-anchor": "top"
+        },
+        paint: {
+          "text-color": "#fff",
+          "text-halo-color": "#0f172a",
+          "text-halo-width": 1.2
+        }
+      });
+    });
+
+    map.on("click", "trip-points", (event) => {
+      const feature = event.features?.[0];
+      const tripId = feature?.properties?.tripId;
+      if (tripId) onSelectTrip(tripId);
+    });
+
+    map.on("click", (event) => {
+      const features = map.queryRenderedFeatures(event.point, { layers: ["trip-points"] });
+      if (features.length === 0) onAddStop(event.lngLat.lat, event.lngLat.lng);
+    });
+
+    mapRef.current = map;
+    return () => map.remove();
+  }, []);
+
+  useEffect(() => {
+    const source = mapRef.current?.getSource("trips") as maplibregl.GeoJSONSource | undefined;
+    source?.setData(geojson);
+  }, [geojson]);
+
+  useEffect(() => {
+    const trip = trips.find((item) => item.id === selectedTripId);
+    if (!trip?.stops.length || !mapRef.current) return;
+    const bounds = new maplibregl.LngLatBounds();
+    trip.stops.forEach((stop) => bounds.extend([stop.lng, stop.lat]));
+    mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 900 });
+  }, [selectedTripId, trips]);
+
+  return <div ref={containerRef} className="map-canvas" />;
+}

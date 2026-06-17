@@ -1,0 +1,17 @@
+{
+  "name": "tripmap",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "pnpm --parallel dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "start": "pnpm --filter @tripmap/api start",
+    "deploy:baller": "bash scripts/deploy-baller.sh"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
