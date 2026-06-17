@@ -1455,6 +1455,10 @@ textarea {
   padding: 10px;
 }
 
+.located-media-panel > .wide-button {
+  width: 100%;
+}
+
 .located-media-list {
   display: grid;
   gap: 8px;
@@ -1469,6 +1473,10 @@ textarea {
   border-radius: 8px;
   background: #fff;
   padding: 7px;
+}
+
+.located-media-list article > div {
+  min-width: 0;
 }
 
 .located-media-list img,

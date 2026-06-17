@@ -50,6 +50,13 @@ type QueuedPlace = {
   arrivedAt: string;
   departedAt: string;
 };
+type LocatedMediaItem = MediaItem & { latitude: number; longitude: number };
+type LocatedMediaGroup = {
+  id: string;
+  items: LocatedMediaItem[];
+  lat: number;
+  lng: number;
+};
 
 const placeChipGroups = [
   {
@@ -188,6 +195,32 @@ function formatDistance(km: number) {
   if (km < 1) return `${Math.round(km * 1000)} m`;
   if (km < 10) return `${km.toFixed(1)} km`;
   return `${Math.round(km)} km`;
+}
+
+function mediaCaptureTime(item: MediaItem) {
+  if (!item.captured_at) return null;
+  const time = new Date(item.captured_at).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function mediaDateLabel(item: MediaItem) {
+  const time = mediaCaptureTime(item);
+  return time !== null ? new Date(time).toLocaleDateString() : null;
+}
+
+function mediaFileTitle(item: MediaItem) {
+  return item.file_name.replace(/\.[^.]+$/, "").trim();
+}
+
+function mediaDestinationTitle(group: LocatedMediaGroup) {
+  const lead = group.items[0];
+  if (!lead) return "Media destination";
+  const date = mediaDateLabel(lead);
+  if (group.items.length > 1) {
+    return date ? `${group.items.length} memories from ${date}` : `${group.items.length} memories`;
+  }
+  const kind = lead.kind === "video" ? "Video" : "Photo";
+  return date ? `${kind} from ${date}` : mediaFileTitle(lead) || "Media destination";
 }
 
 function titleize(value: string) {
@@ -620,7 +653,7 @@ export function App() {
   const locatedUnassignedMedia = useMemo(
     () =>
       (detail?.media ?? []).filter(
-        (item) =>
+        (item): item is LocatedMediaItem =>
           !item.stop_id &&
           typeof item.latitude === "number" &&
           Number.isFinite(item.latitude) &&
@@ -629,6 +662,35 @@ export function App() {
       ),
     [detail?.media]
   );
+  const locatedMediaGroups = useMemo(() => {
+    const groups: LocatedMediaGroup[] = [];
+    const sorted = [...locatedUnassignedMedia].sort((a, b) => {
+      const aTime = mediaCaptureTime(a);
+      const bTime = mediaCaptureTime(b);
+      if (aTime !== null && bTime !== null) return aTime - bTime;
+      if (aTime !== null) return -1;
+      if (bTime !== null) return 1;
+      return a.file_name.localeCompare(b.file_name);
+    });
+
+    sorted.forEach((item) => {
+      const match = groups.find((group) => distanceKm({ lat: group.lat, lng: group.lng }, { lat: item.latitude, lng: item.longitude }) <= 0.08);
+      if (match) {
+        match.items.push(item);
+        match.lat = match.items.reduce((sum, media) => sum + media.latitude, 0) / match.items.length;
+        match.lng = match.items.reduce((sum, media) => sum + media.longitude, 0) / match.items.length;
+        return;
+      }
+      groups.push({
+        id: item.id,
+        items: [item],
+        lat: item.latitude,
+        lng: item.longitude
+      });
+    });
+
+    return groups;
+  }, [locatedUnassignedMedia]);
   const memoryTitle = activeMemoryScope === "active" && activeStop ? activeStop.title : detail?.trip.title ?? "Trip";
   const presentationGroups = useMemo(() => {
     if (!detail) return [];
@@ -1297,26 +1359,59 @@ export function App() {
     }
   }
 
-  async function createStopFromMedia(item: MediaItem) {
-    if (!selectedTripId || typeof item.latitude !== "number" || typeof item.longitude !== "number") return;
+  async function createMediaGroupStop(group: LocatedMediaGroup, sortOrder: number) {
+    if (!selectedTripId || !group.items.length) return null;
+    const { stop } = await api.addStop(selectedTripId, {
+      title: mediaDestinationTitle(group),
+      note:
+        group.items.length === 1
+          ? "Created from media location metadata."
+          : `Created from ${group.items.length} media files with location metadata.`,
+      lat: group.lat,
+      lng: group.lng,
+      sortOrder
+    });
+    await Promise.all(group.items.map((item) => api.updateMedia(item.id, stop.id)));
+    return stop;
+  }
+
+  async function createStopFromMediaGroup(group: LocatedMediaGroup) {
+    if (!selectedTripId || !group.items.length) return;
     setBusy(true);
     setError(null);
     const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
-    const title = item.captured_at
-      ? `Photo from ${new Date(item.captured_at).toLocaleDateString()}`
-      : item.file_name.replace(/\.[^.]+$/, "") || `Stop ${maxSortOrder + 2}`;
     try {
-      const { stop } = await api.addStop(selectedTripId, {
-        title,
-        note: "Created from media location metadata.",
-        lat: item.latitude,
-        lng: item.longitude,
-        sortOrder: maxSortOrder + 1
-      });
-      await api.updateMedia(item.id, stop.id);
+      const stop = await createMediaGroupStop(group, maxSortOrder + 1);
       setDetail(await api.trip(selectedTripId));
-      selectStopId(stop.id);
-      setMemoryScope("active");
+      if (stop) {
+        selectStopId(stop.id);
+        setMemoryScope("active");
+      }
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAllStopsFromMedia() {
+    if (!selectedTripId || !locatedMediaGroups.length) return;
+    setBusy(true);
+    setError(null);
+    const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
+    try {
+      const created: Stop[] = [];
+      for (const [index, group] of locatedMediaGroups.entries()) {
+        const stop = await createMediaGroupStop(group, maxSortOrder + index + 1);
+        if (stop) created.push(stop);
+      }
+      setDetail(await api.trip(selectedTripId));
+      const lastCreated = created[created.length - 1];
+      if (lastCreated) {
+        selectStopId(lastCreated.id);
+        setMemoryScope("active");
+      }
       await load();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
@@ -1662,13 +1757,14 @@ export function App() {
     };
   }
 
-  function mediaLocationLabel(item: MediaItem) {
-    const coordinates =
-      typeof item.latitude === "number" && typeof item.longitude === "number"
-        ? `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}`
-        : "Location found";
-    const date = item.captured_at ? new Date(item.captured_at).toLocaleDateString() : null;
-    return date ? `${coordinates} · ${date}` : coordinates;
+  function mediaGroupLocationLabel(group: LocatedMediaGroup) {
+    const coordinates = `${group.lat.toFixed(4)}, ${group.lng.toFixed(4)}`;
+    const dates = group.items
+      .map(mediaDateLabel)
+      .filter((date, index, list): date is string => Boolean(date && list.indexOf(date) === index));
+    if (!dates.length) return coordinates;
+    if (dates.length === 1) return `${coordinates} · ${dates[0]}`;
+    return `${coordinates} · ${dates[0]} to ${dates[dates.length - 1]}`;
   }
 
   function queuedLegLabel(item: QueuedPlace, index: number) {
@@ -2884,32 +2980,61 @@ export function App() {
                 </span>
                 <input type="file" accept="image/*,video/*" multiple onChange={(event) => upload(event.target.files)} />
               </label>
-              {activeMemoryScope === "all" && locatedUnassignedMedia.length ? (
+              {activeMemoryScope === "all" && locatedMediaGroups.length ? (
                 <div className="located-media-panel">
                   <div className="panel-heading compact-heading">
                     <div>
                       <p className="eyebrow">Found in metadata</p>
                       <h3>Make destinations from media</h3>
+                      <small className="anchor-label">
+                        {locatedUnassignedMedia.length} located file{locatedUnassignedMedia.length === 1 ? "" : "s"} grouped into{" "}
+                        {locatedMediaGroups.length} destination{locatedMediaGroups.length === 1 ? "" : "s"}.
+                      </small>
                     </div>
                     <MapPin size={17} />
                   </div>
+                  <button
+                    className="wide-button subtle"
+                    onClick={createAllStopsFromMedia}
+                    disabled={busy || !locatedMediaGroups.length}
+                    type="button"
+                  >
+                    <Plus size={15} /> Create all {locatedMediaGroups.length}
+                  </button>
                   <div className="located-media-list">
-                    {locatedUnassignedMedia.map((item) => (
-                      <article key={item.id}>
-                        {item.kind === "video" ? (
-                          <video src={mediaThumbUrl(item) ?? mediaUrl(item)} />
-                        ) : (
-                          <img src={mediaThumbUrl(item)} alt={item.file_name} />
-                        )}
-                        <div>
-                          <strong>{item.file_name}</strong>
-                          <small>{mediaLocationLabel(item)}</small>
-                        </div>
-                        <button onClick={() => createStopFromMedia(item)} disabled={busy} type="button">
-                          <Plus size={14} /> Create stop
-                        </button>
-                      </article>
-                    ))}
+                    {locatedMediaGroups.map((group) => {
+                      const lead = group.items[0]!;
+                      return (
+                        <article key={group.id}>
+                          {lead.kind === "video" ? (
+                            <video src={mediaThumbUrl(lead) ?? mediaUrl(lead)} />
+                          ) : (
+                            <img src={mediaThumbUrl(lead)} alt={lead.file_name} />
+                          )}
+                          <div>
+                            <strong>{mediaDestinationTitle(group)}</strong>
+                            <small>{mediaGroupLocationLabel(group)}</small>
+                            <small>
+                              {group.items.length} file{group.items.length === 1 ? "" : "s"}
+                              {group.items.length > 1 ? ` near ${lead.file_name}` : ` · ${lead.file_name}`}
+                            </small>
+                          </div>
+                          <button onClick={() => createStopFromMediaGroup(group)} disabled={busy} type="button">
+                            <Plus size={14} /> Create stop
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : activeMemoryScope === "all" && locatedUnassignedMedia.length ? (
+                <div className="located-media-panel">
+                  <div className="panel-heading compact-heading">
+                    <div>
+                      <p className="eyebrow">Found in metadata</p>
+                      <h3>Reading locations</h3>
+                    </div>
+                    <Loader2 className="spin" size={17} />
                   </div>
                 </div>
               ) : null}
