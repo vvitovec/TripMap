@@ -705,6 +705,16 @@ export function App() {
     }
   }
 
+  function handlePlaceSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || event.shiftKey || searchingPlaces || !topVisiblePlace) return;
+    event.preventDefault();
+    if (event.metaKey || event.ctrlKey) {
+      if (!busy) void addPlaceToRoute(topVisiblePlace, topVisiblePlace.name, "");
+      return;
+    }
+    selectPlace(topVisiblePlace);
+  }
+
   function searchNearbyCategory(query: string) {
     setDestinationMode("nearby");
     setPlaceQuery(query);
@@ -1834,6 +1844,7 @@ export function App() {
                         setDestinationMode("search");
                         setPlaceQuery(event.target.value);
                       }}
+                      onKeyDown={handlePlaceSearchKeyDown}
                       placeholder="Address, hotel, landmark, coordinates"
                     />
                   </div>
