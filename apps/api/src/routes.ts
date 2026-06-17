@@ -171,6 +171,20 @@ function normalizePlaceQuery(query: string) {
   return nearbyCategoryQueries.get(query.trim().toLowerCase()) ?? query.trim();
 }
 
+function parseCoordinateQuery(query: string) {
+  const trimmed = query.trim();
+  const urlMatch = trimmed.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+  const directMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)$/);
+  const match = urlMatch ?? directMatch;
+  if (!match) return null;
+
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
 async function waitForNominatimSlot() {
   const elapsed = Date.now() - lastNominatimSearchAt;
   const waitMs = Math.max(0, 1100 - elapsed);
@@ -182,6 +196,17 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   const cacheKey = JSON.stringify(input).toLowerCase();
   const cached = placeSearchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.places;
+
+  const coordinates = parseCoordinateQuery(input.q);
+  if (coordinates) {
+    const place = await reversePlace(coordinates);
+    const places = [place];
+    placeSearchCache.set(cacheKey, {
+      expiresAt: Date.now() + 1000 * 60 * 30,
+      places
+    });
+    return places;
+  }
 
   const normalizedQuery = normalizePlaceQuery(input.q);
   const hasAnchor = input.lat !== undefined && input.lng !== undefined;
