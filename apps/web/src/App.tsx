@@ -1267,6 +1267,22 @@ export function App() {
     scrollToDestinationPanel();
   }
 
+  function selectPreviewPlaceFromMap(placeId: string) {
+    const queued = routeQueue.find((item) => item.place.id === placeId);
+    if (queued) {
+      exploreQueuedPlace(queued);
+      return;
+    }
+    const place =
+      placeDraft?.id === placeId
+        ? placeDraft
+        : mapSearchPreviewPlaces.find((item) => item.id === placeId) ??
+          mapPreviewPlaces.find((item) => item.id === placeId);
+    if (!place) return;
+    selectPlace(place);
+    setError(null);
+  }
+
   function queueTopVisiblePlaces() {
     topQueueablePlaces.forEach((place) => queuePlace(place));
   }
@@ -2074,6 +2090,7 @@ export function App() {
           previewRoute={mapPreviewRoute}
           onSelectTrip={selectTripId}
           onSelectStop={selectStopId}
+          onSelectPreviewPlace={selectPreviewPlaceFromMap}
           onMapClick={previewMapPin}
           onViewChange={setMapFocus}
         />

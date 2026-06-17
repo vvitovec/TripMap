@@ -11,6 +11,7 @@ type Props = {
   previewRoute?: Array<{ lat: number; lng: number }>;
   onSelectTrip: (id: string) => void;
   onSelectStop?: (id: string) => void;
+  onSelectPreviewPlace?: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
   onViewChange?: (center: { lat: number; lng: number }) => void;
 };
@@ -24,12 +25,31 @@ export function TripMap({
   previewRoute,
   onSelectTrip,
   onSelectStop,
+  onSelectPreviewPlace,
   onMapClick,
   onViewChange
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const callbacksRef = useRef({
+    onMapClick,
+    onSelectPreviewPlace,
+    onSelectStop,
+    onSelectTrip,
+    onViewChange
+  });
   const previewRoutePoints = previewRoute ?? [];
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onMapClick,
+      onSelectPreviewPlace,
+      onSelectStop,
+      onSelectTrip,
+      onViewChange
+    };
+  }, [onMapClick, onSelectPreviewPlace, onSelectStop, onSelectTrip, onViewChange]);
+
   const effectivePreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     previewPlaces?.forEach((place) => previews.set(place.id, place));
@@ -97,6 +117,7 @@ export function TripMap({
       type: "Feature" as const,
       properties: {
         tripId: "",
+        previewPlaceId: place.id,
         title: effectivePreviewPlaces.length > 1 ? `${index + 1}. ${place.name}` : place.name,
         tripTitle: "Preview",
         selected: true,
@@ -156,7 +177,7 @@ export function TripMap({
 
     const reportCenter = () => {
       const center = map.getCenter();
-      onViewChange?.({ lat: center.lat, lng: center.lng });
+      callbacksRef.current.onViewChange?.({ lat: center.lat, lng: center.lng });
     };
 
     map.on("load", () => {
@@ -246,16 +267,20 @@ export function TripMap({
 
     map.on("click", "trip-points", (event) => {
       const feature = event.features?.[0];
-      if (feature?.properties?.preview) return;
+      if (feature?.properties?.preview) {
+        const previewPlaceId = feature.properties.previewPlaceId;
+        if (previewPlaceId) callbacksRef.current.onSelectPreviewPlace?.(previewPlaceId);
+        return;
+      }
       const tripId = feature?.properties?.tripId;
       const stopId = feature?.properties?.stopId;
-      if (tripId) onSelectTrip(tripId);
-      if (stopId && onSelectStop) onSelectStop(stopId);
+      if (tripId) callbacksRef.current.onSelectTrip(tripId);
+      if (stopId) callbacksRef.current.onSelectStop?.(stopId);
     });
 
     map.on("click", (event) => {
       const features = map.queryRenderedFeatures(event.point, { layers: ["trip-points"] });
-      if (features.length === 0) onMapClick(event.lngLat.lat, event.lngLat.lng);
+      if (features.length === 0) callbacksRef.current.onMapClick(event.lngLat.lat, event.lngLat.lng);
     });
     map.on("moveend", reportCenter);
 
