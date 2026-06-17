@@ -852,6 +852,22 @@ export function App() {
     setError(null);
   }
 
+  function exploreAroundPlace(place: PlaceSearchResult, savedStop?: Stop | null) {
+    if (savedStop) {
+      selectStopId(savedStop.id);
+      setSearchOrigin("context");
+    } else {
+      selectPlace(place);
+      setSearchOrigin("draft");
+    }
+    setDestinationMode("nearby");
+    setPlaceQuery("landmark");
+    setActivePresetId(null);
+    setActivePresetStep(0);
+    setPlanningPresetId(null);
+    setError(null);
+  }
+
   function startDestinationPreset(preset: DestinationPreset) {
     setActivePresetId(preset.id);
     setActivePresetStep(0);
@@ -2380,6 +2396,14 @@ export function App() {
                         >
                           {savedStop ? <Check size={14} /> : <Plus size={14} />}
                           {savedStop ? "Open" : "Add"}
+                        </button>
+                        <button
+                          className="place-result-nearby"
+                          onClick={() => exploreAroundPlace(place, savedStop)}
+                          disabled={busy}
+                          type="button"
+                        >
+                          <Compass size={14} /> Explore
                         </button>
                         <button
                           className={queuedPlaceIds.has(place.id) || savedStop ? "place-result-queue active" : "place-result-queue"}
