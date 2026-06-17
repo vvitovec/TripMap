@@ -555,20 +555,60 @@ textarea {
   color: #35536d;
 }
 
-.quick-chips {
-  display: flex;
+.quick-search-panel {
+  display: grid;
   gap: 7px;
-  flex-wrap: wrap;
+}
+
+.quick-search-panel > small {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.quick-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
 }
 
 .quick-chips button {
+  min-width: 0;
   border: 1px solid #d6dde5;
-  border-radius: 999px;
-  min-height: 30px;
-  padding: 0 10px;
+  border-radius: 8px;
+  min-height: 42px;
+  padding: 7px 9px;
   background: #f8faf8;
   color: #35536d;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.quick-chips button:hover {
+  border-color: #22c55e;
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.quick-chips button span,
+.quick-chips button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-chips button span {
+  font-weight: 700;
   font-size: 13px;
+}
+
+.quick-chips button small {
+  color: #667085;
+  font-size: 11px;
 }
 
 .destination-presets {
@@ -1855,7 +1895,8 @@ textarea {
     border-left: 0;
   }
 
-  .nearby-grid {
+  .nearby-grid,
+  .quick-chips {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

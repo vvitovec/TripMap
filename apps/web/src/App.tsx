@@ -42,6 +42,7 @@ type DestinationPreset = {
   hint: string;
   steps: Array<{ label: string; query: string }>;
 };
+type PlaceChip = { label: string; query: string; hint: string };
 type QueuedPlace = {
   place: PlaceSearchResult;
   title: string;
@@ -103,6 +104,18 @@ const placeChipGroups = [
 ];
 
 const placeChips = placeChipGroups.flatMap((group) => group.chips);
+
+function pickPlaceChips(queries: string[]) {
+  const seen = new Set<string>();
+  return queries
+    .map((query) => placeChips.find((chip) => chip.query === query))
+    .filter((chip): chip is PlaceChip => Boolean(chip))
+    .filter((chip) => {
+      if (seen.has(chip.query)) return false;
+      seen.add(chip.query);
+      return true;
+    });
+}
 
 const destinationPresets: DestinationPreset[] = [
   {
@@ -521,6 +534,17 @@ export function App() {
       .map((id) => destinationPresets.find((preset) => preset.id === id))
       .filter((preset): preset is DestinationPreset => Boolean(preset));
   }, [currentTrip?.type]);
+  const contextualSearchChips = useMemo(() => {
+    const queries =
+      currentTrip?.type === "road_trip"
+        ? routeQueue.length
+          ? ["fuel", "parking", "restaurant", "landmark", "hotel", "viewpoint"]
+          : ["hotel", "fuel", "parking", "landmark", "restaurant", "viewpoint"]
+        : mainStops.length
+          ? ["landmark", "restaurant", "cafe", "park", "museum", "viewpoint"]
+          : ["hotel", "landmark", "restaurant", "viewpoint", "park", "beach"];
+    return pickPlaceChips(queries);
+  }, [currentTrip?.type, mainStops.length, routeQueue.length]);
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     routeQueue.forEach((item) => previews.set(item.place.id, item.place));
@@ -2275,16 +2299,28 @@ export function App() {
                       ))}
                     </div>
                   ) : (
-                    <div className="quick-chips">
-                      {placeChips.slice(0, 6).map((chip) => (
-                        <button
-                          key={chip.label}
-                          onClick={() => searchNearbyCategory(chip.query)}
-                          type="button"
-                        >
-                          {chip.label}
-                        </button>
-                      ))}
+                    <div className="quick-search-panel">
+                      <small>
+                        {currentTrip?.type === "road_trip"
+                          ? routeQueue.length
+                            ? "Good next stops"
+                            : "Road trip starters"
+                          : mainStops.length
+                            ? "Ideas near this trip"
+                            : "Start with"}
+                      </small>
+                      <div className="quick-chips">
+                        {contextualSearchChips.map((chip) => (
+                          <button
+                            key={chip.label}
+                            onClick={() => searchNearbyCategory(chip.query)}
+                            type="button"
+                          >
+                            <span>{chip.label}</span>
+                            <small>{chip.hint}</small>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </>
