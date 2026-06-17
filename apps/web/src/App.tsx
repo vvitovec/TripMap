@@ -540,6 +540,14 @@ export function App() {
     const previewPoints = mapPreviewPlaces.map((place) => ({ lat: place.lat, lng: place.lng }));
     return queueAnchor ? [{ lat: queueAnchor.lat, lng: queueAnchor.lng }, ...previewPoints] : previewPoints;
   }, [mapPreviewPlaces, queueAnchor]);
+  const queuedRouteKm = useMemo(() => {
+    let cursor: { lat: number; lng: number } | null = queueAnchor;
+    return routeQueue.reduce((sum, item) => {
+      const legKm = cursor ? distanceKm(cursor, item.place) : 0;
+      cursor = item.place;
+      return sum + legKm;
+    }, 0);
+  }, [queueAnchor, routeQueue]);
   const routeIndexByStopId = useMemo(() => {
     const indexes = new Map<string, number>();
     orderedStops.forEach((stop, index) => indexes.set(stop.id, index));
@@ -2420,6 +2428,11 @@ export function App() {
                       <small className="anchor-label">{destinationPlacementLabel()}</small>
                     </div>
                     <ListFilter size={17} />
+                  </div>
+                  <div className="route-queue-summary">
+                    <span><Route size={14} /> {queuedRouteKm ? formatDistance(queuedRouteKm) : "Distance starts at first queued stop"}</span>
+                    <span><MapPin size={14} /> {destinationPlacementLabel()}</span>
+                    <span><ListFilter size={14} /> {routeQueue.length} queued</span>
                   </div>
                   <div className="route-queue-list">
                     {routeQueue.map((item, index) => (

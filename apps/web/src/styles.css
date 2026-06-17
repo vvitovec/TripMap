@@ -1026,6 +1026,30 @@ textarea {
   padding: 10px;
 }
 
+.route-queue-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.route-queue-summary span {
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid #f4e4d2;
+  border-radius: 8px;
+  background: #fff;
+  color: #7c2d12;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .route-queue-list {
   display: grid;
   gap: 7px;
@@ -1789,6 +1813,10 @@ textarea {
 
   .route-queue-list article {
     grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .route-queue-summary {
+    grid-template-columns: 1fr;
   }
 
   .draft-actions {
