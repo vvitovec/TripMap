@@ -185,6 +185,20 @@ textarea {
   place-items: center;
 }
 
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.mini-button {
+  width: 32px;
+  height: 32px;
+}
+
+.danger-button {
+  color: #b42318;
+}
+
 .action-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -304,6 +318,18 @@ textarea {
   padding: 12px;
 }
 
+.context-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.context-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .active-context strong,
 .active-context small {
   display: block;
@@ -316,6 +342,18 @@ textarea {
 
 .muted-context {
   background: #f8faf8;
+}
+
+.stop-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.editor-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .place-workflow {
@@ -517,15 +555,25 @@ textarea {
   border-top: 1px solid #dbe3df;
   border-right: 1px solid #dbe3df;
   border-bottom: 1px solid #dbe3df;
-  padding: 10px 12px;
   background: #fff;
   border-radius: 0 8px 8px 0;
-  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  overflow: hidden;
 }
 
 .stop-card.active {
   border-left-color: #fde047;
   background: #fffbeb;
+}
+
+.stop-main {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  text-align: left;
 }
 
 .stop-card strong,
@@ -540,6 +588,16 @@ textarea {
 
 .stop-card p {
   margin: 6px 0 0;
+}
+
+.stop-actions {
+  display: grid;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px;
+  color: #667085;
+  border-left: 1px solid #edf1ee;
 }
 
 .media-grid {

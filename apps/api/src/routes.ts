@@ -24,6 +24,7 @@ type PlaceResult = {
 };
 
 const placeSearchCache = new Map<string, { expiresAt: number; places: unknown[] }>();
+const placeReverseCache = new Map<string, { expiresAt: number; place: unknown }>();
 let lastNominatimSearchAt = 0;
 
 const registerSchema = z.object({
@@ -69,10 +70,17 @@ const stopSchema = z.object({
   branchOf: z.string().uuid().nullable().optional()
 });
 
+const stopUpdateSchema = stopSchema.partial();
+
 const placeSearchSchema = z.object({
   q: z.string().trim().min(3).max(180),
   lat: z.coerce.number().min(-90).max(90).optional(),
   lng: z.coerce.number().min(-180).max(180).optional()
+});
+
+const placeReverseSchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180)
 });
 
 function placeName(result: PlaceResult) {
@@ -164,6 +172,72 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     if (firstKey) placeSearchCache.delete(firstKey);
   }
   return places;
+}
+
+function normalizePlace(result: PlaceResult, source: "nominatim" | "map" = "nominatim") {
+  return {
+    id: `${result.osm_type ?? "place"}-${result.osm_id ?? result.place_id}`,
+    name: placeName(result),
+    label: result.display_name,
+    category: placeCategory(result),
+    type: result.type ?? result.class ?? "place",
+    lat: Number(result.lat),
+    lng: Number(result.lon),
+    importance: result.importance,
+    address: result.address ?? {},
+    source
+  };
+}
+
+async function reversePlace(input: z.infer<typeof placeReverseSchema>) {
+  const cacheKey = `${input.lat.toFixed(5)},${input.lng.toFixed(5)}`;
+  const cached = placeReverseCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.place;
+
+  await waitForNominatimSlot();
+  const params = new URLSearchParams({
+    lat: String(input.lat),
+    lon: String(input.lng),
+    format: "jsonv2",
+    addressdetails: "1",
+    namedetails: "1",
+    zoom: "18",
+    "accept-language": "en"
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+    headers: {
+      "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
+      Referer: "https://trip.vvitovec.com"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Reverse geocoding failed with status ${response.status}`);
+  }
+  const data = (await response.json()) as PlaceResult & { error?: string };
+  const place =
+    data.error || !data.lat || !data.lon
+      ? {
+          id: `map-${cacheKey}`,
+          name: "Dropped pin",
+          label: cacheKey,
+          category: "map pin",
+          type: "pin",
+          lat: input.lat,
+          lng: input.lng,
+          address: {},
+          source: "map" as const
+        }
+      : normalizePlace(data, "nominatim");
+
+  placeReverseCache.set(cacheKey, {
+    expiresAt: Date.now() + 1000 * 60 * 30,
+    place
+  });
+  if (placeReverseCache.size > 200) {
+    const firstKey = placeReverseCache.keys().next().value;
+    if (firstKey) placeReverseCache.delete(firstKey);
+  }
+  return place;
 }
 
 function cookieOptions() {
@@ -305,6 +379,30 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get("/places/reverse", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const input = placeReverseSchema.parse(request.query);
+    try {
+      return { place: await reversePlace(input) };
+    } catch (error) {
+      request.log.warn({ error }, "reverse place lookup failed");
+      return {
+        place: {
+          id: `map-${input.lat}-${input.lng}`,
+          name: "Dropped pin",
+          label: `${input.lat.toFixed(5)}, ${input.lng.toFixed(5)}`,
+          category: "map pin",
+          type: "pin",
+          lat: input.lat,
+          lng: input.lng,
+          address: {},
+          source: "map"
+        }
+      };
+    }
+  });
+
   app.get("/folders", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
@@ -439,6 +537,76 @@ export async function registerRoutes(app: FastifyInstance) {
     );
     await pool.query("UPDATE trips SET updated_at = now() WHERE id = $1", [id]);
     return { stop: rows[0] };
+  });
+
+  app.patch("/trips/:id/stops/:stopId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id, stopId } = request.params as { id: string; stopId: string };
+    if (!(await canEditTrip(id, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    const input = stopUpdateSchema.parse(request.body);
+    const { rows } = await pool.query(
+      `UPDATE stops
+       SET title = CASE WHEN $3 THEN $4 ELSE title END,
+           note = CASE WHEN $5 THEN $6 ELSE note END,
+           lat = CASE WHEN $7 THEN $8 ELSE lat END,
+           lng = CASE WHEN $9 THEN $10 ELSE lng END,
+           sort_order = CASE WHEN $11 THEN $12 ELSE sort_order END,
+           arrived_at = CASE WHEN $13 THEN $14 ELSE arrived_at END,
+           departed_at = CASE WHEN $15 THEN $16 ELSE departed_at END,
+           branch_of = CASE WHEN $17 THEN $18 ELSE branch_of END
+       WHERE trip_id = $1 AND id = $2
+       RETURNING *`,
+      [
+        id,
+        stopId,
+        input.title !== undefined,
+        input.title ?? null,
+        input.note !== undefined,
+        input.note ?? null,
+        input.lat !== undefined,
+        input.lat ?? null,
+        input.lng !== undefined,
+        input.lng ?? null,
+        input.sortOrder !== undefined,
+        input.sortOrder ?? null,
+        input.arrivedAt !== undefined,
+        input.arrivedAt ?? null,
+        input.departedAt !== undefined,
+        input.departedAt ?? null,
+        input.branchOf !== undefined,
+        input.branchOf ?? null
+      ]
+    );
+    if (!rows[0]) {
+      reply.code(404).send({ error: "Stop not found" });
+      return;
+    }
+    await pool.query("UPDATE trips SET updated_at = now() WHERE id = $1", [id]);
+    return { stop: rows[0] };
+  });
+
+  app.delete("/trips/:id/stops/:stopId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id, stopId } = request.params as { id: string; stopId: string };
+    if (!(await canEditTrip(id, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    const { rowCount } = await pool.query(
+      "DELETE FROM stops WHERE trip_id = $1 AND id = $2",
+      [id, stopId]
+    );
+    if (!rowCount) {
+      reply.code(404).send({ error: "Stop not found" });
+      return;
+    }
+    await pool.query("UPDATE trips SET updated_at = now() WHERE id = $1", [id]);
+    return { ok: true };
   });
 
   app.post("/trips/:id/notes", async (request, reply) => {

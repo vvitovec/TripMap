@@ -67,6 +67,10 @@ export const api = {
     }
     return request<{ places: PlaceSearchResult[] }>(`/places/search?${params}`);
   },
+  reversePlace: (lat: number, lng: number) => {
+    const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
+    return request<{ place: PlaceSearchResult }>(`/places/reverse?${params}`);
+  },
   addStop: (
     tripId: string,
     input: { title: string; note: string; lat: number; lng: number; sortOrder: number }
@@ -74,6 +78,19 @@ export const api = {
     request<{ stop: Stop }>(`/trips/${tripId}/stops`, {
       method: "POST",
       body: JSON.stringify(input)
+    }),
+  updateStop: (
+    tripId: string,
+    stopId: string,
+    input: Partial<{ title: string; note: string; lat: number; lng: number; sortOrder: number }>
+  ) =>
+    request<{ stop: Stop }>(`/trips/${tripId}/stops/${stopId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
+  deleteStop: (tripId: string, stopId: string) =>
+    request<{ ok: boolean }>(`/trips/${tripId}/stops/${stopId}`, {
+      method: "DELETE"
     }),
   addNote: (tripId: string, body: string, stopId?: string | null) =>
     request(`/trips/${tripId}/notes`, {

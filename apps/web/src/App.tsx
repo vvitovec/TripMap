@@ -1,17 +1,22 @@
 import {
   Camera,
   Check,
+  ChevronDown,
+  ChevronUp,
   Crosshair,
   FileText,
   FolderPlus,
+  GripVertical,
   Image,
   Loader2,
   LogOut,
   MapPin,
+  Pencil,
   Plus,
   Search,
   Route,
   Share2,
+  Trash2,
   X,
   Upload
 } from "lucide-react";
@@ -48,6 +53,9 @@ export function App() {
   const [newTripFolderId, setNewTripFolderId] = useState("");
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [editingStop, setEditingStop] = useState(false);
+  const [stopTitleDraft, setStopTitleDraft] = useState("");
+  const [stopNoteDraft, setStopNoteDraft] = useState("");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -98,6 +106,10 @@ export function App() {
     () => detail?.stops.find((stop) => stop.id === selectedStopId) ?? null,
     [detail?.stops, selectedStopId]
   );
+  const orderedStops = useMemo(
+    () => [...(detail?.stops ?? [])].sort((a, b) => a.sort_order - b.sort_order),
+    [detail?.stops]
+  );
   const stopMediaCounts = useMemo(() => {
     const counts = new Map<string, number>();
     detail?.media.forEach((item) => {
@@ -120,6 +132,12 @@ export function App() {
       lng: stops.reduce((sum, stop) => sum + stop.lng, 0) / stops.length
     };
   }, [currentTrip?.stops, detail?.stops]);
+
+  useEffect(() => {
+    if (!activeStop || editingStop) return;
+    setStopTitleDraft(activeStop.title);
+    setStopNoteDraft(activeStop.note ?? "");
+  }, [activeStop, editingStop]);
 
   useEffect(() => {
     const query = placeQuery.trim();
@@ -207,19 +225,27 @@ export function App() {
     setDraftNote("");
   }
 
-  function previewMapPin(lat: number, lng: number) {
+  async function previewMapPin(lat: number, lng: number) {
     if (!selectedTripId) return;
-    const label = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    selectPlace({
-      id: `map-${lat}-${lng}`,
-      name: "Dropped pin",
-      label,
-      category: "map pin",
-      type: "pin",
-      lat,
-      lng,
-      source: "map"
-    });
+    setBusy(true);
+    try {
+      const { place } = await api.reversePlace(lat, lng);
+      selectPlace(place);
+    } catch {
+      const label = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      selectPlace({
+        id: `map-${lat}-${lng}`,
+        name: "Dropped pin",
+        label,
+        category: "map pin",
+        type: "pin",
+        lat,
+        lng,
+        source: "map"
+      });
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function addStopFromDraft() {
@@ -268,6 +294,62 @@ export function App() {
       await api.addNote(selectedTripId, noteDraft.trim(), selectedStopId);
       setNoteDraft("");
       setDetail(await api.trip(selectedTripId));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveActiveStop() {
+    if (!selectedTripId || !activeStop) return;
+    setBusy(true);
+    try {
+      await api.updateStop(selectedTripId, activeStop.id, {
+        title: stopTitleDraft.trim() || activeStop.title,
+        note: stopNoteDraft.trim()
+      });
+      setEditingStop(false);
+      setDetail(await api.trip(selectedTripId));
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteActiveStop() {
+    if (!selectedTripId || !activeStop) return;
+    if (!window.confirm(`Delete ${activeStop.title}?`)) return;
+    setBusy(true);
+    try {
+      await api.deleteStop(selectedTripId, activeStop.id);
+      setSelectedStopId(null);
+      setEditingStop(false);
+      setDetail(await api.trip(selectedTripId));
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function moveStop(stop: Stop, direction: -1 | 1) {
+    if (!selectedTripId || !detail) return;
+    const ordered = [...detail.stops].sort((a, b) => a.sort_order - b.sort_order);
+    const index = ordered.findIndex((item) => item.id === stop.id);
+    const swap = ordered[index + direction];
+    if (!swap) return;
+    setBusy(true);
+    try {
+      await Promise.all([
+        api.updateStop(selectedTripId, stop.id, { sortOrder: swap.sort_order }),
+        api.updateStop(selectedTripId, swap.id, { sortOrder: stop.sort_order })
+      ]);
+      setDetail(await api.trip(selectedTripId));
+      await load();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -469,9 +551,71 @@ export function App() {
 
             {activeStop ? (
               <section className="active-context">
-                <p className="eyebrow">Active stop</p>
-                <strong>{activeStop.title}</strong>
-                <small>{stopSubtitle(activeStop)}</small>
+                <div className="context-top">
+                  <div>
+                    <p className="eyebrow">Active stop</p>
+                    <strong>{activeStop.title}</strong>
+                  </div>
+                  <div className="context-actions">
+                    <button
+                      className="icon-button mini-button"
+                      onClick={() => {
+                        setStopTitleDraft(activeStop.title);
+                        setStopNoteDraft(activeStop.note ?? "");
+                        setEditingStop(true);
+                      }}
+                      title="Edit stop"
+                      type="button"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      className="icon-button mini-button danger-button"
+                      onClick={deleteActiveStop}
+                      title="Delete stop"
+                      type="button"
+                      disabled={busy}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+                {editingStop ? (
+                  <div className="stop-editor">
+                    <input
+                      value={stopTitleDraft}
+                      onChange={(event) => setStopTitleDraft(event.target.value)}
+                      placeholder="Stop title"
+                    />
+                    <textarea
+                      value={stopNoteDraft}
+                      onChange={(event) => setStopNoteDraft(event.target.value)}
+                      placeholder="Private stop note"
+                      rows={3}
+                    />
+                    <div className="editor-actions">
+                      <button className="wide-button" onClick={saveActiveStop} disabled={busy} type="button">
+                        <Check size={16} /> Save
+                      </button>
+                      <button
+                        className="wide-button subtle"
+                        onClick={() => {
+                          setEditingStop(false);
+                          setStopTitleDraft(activeStop.title);
+                          setStopNoteDraft(activeStop.note ?? "");
+                        }}
+                        type="button"
+                      >
+                        <X size={16} /> Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <small>{stopSubtitle(activeStop)}</small>
+                    {activeStop.note ? <p>{activeStop.note}</p> : null}
+                  </>
+                )}
               </section>
             ) : (
               <section className="active-context muted-context">
@@ -605,16 +749,38 @@ export function App() {
             </button>
 
             <div className="timeline">
-              {detail.stops.map((stop) => (
-                <button
+              {orderedStops.map((stop, index) => (
+                <article
                   key={stop.id}
                   className={stop.id === selectedStopId ? "stop-card active" : "stop-card"}
-                  onClick={() => setSelectedStopId(stop.id)}
                 >
-                  <strong>{stop.title}</strong>
-                  <small>{stopSubtitle(stop)}</small>
-                  {stop.note ? <p>{stop.note}</p> : null}
-                </button>
+                  <button className="stop-main" onClick={() => setSelectedStopId(stop.id)} type="button">
+                    <strong>{stop.title}</strong>
+                    <small>{stopSubtitle(stop)}</small>
+                    {stop.note ? <p>{stop.note}</p> : null}
+                  </button>
+                  <div className="stop-actions">
+                    <GripVertical size={16} />
+                    <button
+                      className="icon-button mini-button"
+                      onClick={() => moveStop(stop, -1)}
+                      disabled={busy || index === 0}
+                      title="Move stop up"
+                      type="button"
+                    >
+                      <ChevronUp size={15} />
+                    </button>
+                    <button
+                      className="icon-button mini-button"
+                      onClick={() => moveStop(stop, 1)}
+                      disabled={busy || index === orderedStops.length - 1}
+                      title="Move stop down"
+                      type="button"
+                    >
+                      <ChevronDown size={15} />
+                    </button>
+                  </div>
+                </article>
               ))}
             </div>
 
