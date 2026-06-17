@@ -73,7 +73,14 @@ export const api = {
   },
   addStop: (
     tripId: string,
-    input: { title: string; note: string; lat: number; lng: number; sortOrder: number }
+    input: {
+      title: string;
+      note: string;
+      lat: number;
+      lng: number;
+      sortOrder: number;
+      branchOf?: string | null;
+    }
   ) =>
     request<{ stop: Stop }>(`/trips/${tripId}/stops`, {
       method: "POST",
@@ -82,7 +89,14 @@ export const api = {
   updateStop: (
     tripId: string,
     stopId: string,
-    input: Partial<{ title: string; note: string; lat: number; lng: number; sortOrder: number }>
+    input: Partial<{
+      title: string;
+      note: string;
+      lat: number;
+      lng: number;
+      sortOrder: number;
+      branchOf: string | null;
+    }>
   ) =>
     request<{ stop: Stop }>(`/trips/${tripId}/stops/${stopId}`, {
       method: "PATCH",

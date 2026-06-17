@@ -19,6 +19,8 @@ export type Stop = {
   lng: number;
   sort_order: number;
   arrived_at?: string | null;
+  departed_at?: string | null;
+  branch_of?: string | null;
 };
 
 export type MediaItem = {

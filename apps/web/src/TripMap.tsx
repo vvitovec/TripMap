@@ -34,7 +34,8 @@ export function TripMap({
           title: stop.title,
           tripTitle: trip.title,
           selected: trip.id === selectedTripId,
-          activeStop: stop.id === selectedStopId
+          activeStop: stop.id === selectedStopId,
+          branchOf: stop.branch_of ?? ""
         },
         geometry: {
           type: "Point" as const,
@@ -43,15 +44,42 @@ export function TripMap({
       }))
     );
     const lineFeatures = trips
-      .filter((trip) => trip.type === "road_trip" && trip.stops.length > 1)
-      .map((trip) => ({
-        type: "Feature" as const,
-        properties: { tripId: trip.id, selected: trip.id === selectedTripId },
-        geometry: {
-          type: "LineString" as const,
-          coordinates: trip.stops.map((stop) => [stop.lng, stop.lat])
-        }
-      }));
+      .flatMap((trip) => {
+        const orderedStops = [...trip.stops].sort((a, b) => a.sort_order - b.sort_order);
+        const mainStops = orderedStops.filter((stop) => !stop.branch_of);
+        const route =
+          trip.type === "road_trip" && mainStops.length > 1
+            ? [
+                {
+                  type: "Feature" as const,
+                  properties: { tripId: trip.id, selected: trip.id === selectedTripId, kind: "route" },
+                  geometry: {
+                    type: "LineString" as const,
+                    coordinates: mainStops.map((stop) => [stop.lng, stop.lat])
+                  }
+                }
+              ]
+            : [];
+        const branches = orderedStops.flatMap((stop) => {
+          if (!stop.branch_of) return [];
+          const parent = orderedStops.find((item) => item.id === stop.branch_of);
+          if (!parent) return [];
+          return [
+            {
+              type: "Feature" as const,
+              properties: { tripId: trip.id, selected: trip.id === selectedTripId, kind: "branch" },
+              geometry: {
+                type: "LineString" as const,
+                coordinates: [
+                  [parent.lng, parent.lat],
+                  [stop.lng, stop.lat]
+                ]
+              }
+            }
+          ];
+        });
+        return [...route, ...branches];
+      });
     const previewFeature = previewPlace
       ? {
           type: "Feature" as const,
@@ -105,11 +133,23 @@ export function TripMap({
         id: "trip-lines",
         type: "line",
         source: "trips",
-        filter: ["==", "$type", "LineString"],
+        filter: ["all", ["==", "$type", "LineString"], ["==", ["get", "kind"], "route"]],
         paint: {
           "line-width": ["case", ["get", "selected"], 5, 3],
           "line-color": ["case", ["get", "selected"], "#f97316", "#38bdf8"],
           "line-opacity": 0.88
+        }
+      });
+      map.addLayer({
+        id: "trip-branches",
+        type: "line",
+        source: "trips",
+        filter: ["all", ["==", "$type", "LineString"], ["==", ["get", "kind"], "branch"]],
+        paint: {
+          "line-width": ["case", ["get", "selected"], 4, 2],
+          "line-color": ["case", ["get", "selected"], "#22c55e", "#67e8f9"],
+          "line-dasharray": [1.4, 1.2],
+          "line-opacity": 0.9
         }
       });
       map.addLayer({

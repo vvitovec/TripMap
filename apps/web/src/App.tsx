@@ -6,8 +6,10 @@ import {
   Crosshair,
   FileText,
   FolderPlus,
+  GitBranch,
   GripVertical,
   Image,
+  ListFilter,
   Loader2,
   LogOut,
   MapPin,
@@ -26,6 +28,18 @@ import { TripMap } from "./TripMap";
 import type { Folder, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
 
 type AuthMode = "login" | "register";
+type DestinationScope = "main" | "branch";
+
+const placeChips = [
+  { label: "Hotels", query: "hotel" },
+  { label: "Resorts", query: "resort" },
+  { label: "Landmarks", query: "landmark" },
+  { label: "Restaurants", query: "restaurant" },
+  { label: "Viewpoints", query: "viewpoint" },
+  { label: "Parks", query: "park" },
+  { label: "Museums", query: "museum" },
+  { label: "Fuel", query: "fuel" }
+];
 
 export function App() {
   const shareToken = location.pathname.startsWith("/share/")
@@ -45,14 +59,20 @@ export function App() {
   const [placeDraft, setPlaceDraft] = useState<PlaceSearchResult | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
+  const [destinationScope, setDestinationScope] = useState<DestinationScope>("main");
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
+  const [selectedFolderId, setSelectedFolderId] = useState<"all" | "unfiled" | string>("all");
   const [newTripType, setNewTripType] = useState<Trip["type"]>("one_destination");
   const [newTripTitle, setNewTripTitle] = useState("");
   const [newTripDescription, setNewTripDescription] = useState("");
   const [newTripFolderId, setNewTripFolderId] = useState("");
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [editingTrip, setEditingTrip] = useState(false);
+  const [tripTitleDraft, setTripTitleDraft] = useState("");
+  const [tripDescriptionDraft, setTripDescriptionDraft] = useState("");
+  const [tripFolderDraft, setTripFolderDraft] = useState("");
   const [editingStop, setEditingStop] = useState(false);
   const [stopTitleDraft, setStopTitleDraft] = useState("");
   const [stopNoteDraft, setStopNoteDraft] = useState("");
@@ -102,6 +122,20 @@ export function App() {
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
     [selectedTripId, trips]
   );
+  const filteredTrips = useMemo(() => {
+    if (selectedFolderId === "all") return trips;
+    if (selectedFolderId === "unfiled") return trips.filter((trip) => !trip.folder_id);
+    return trips.filter((trip) => trip.folder_id === selectedFolderId);
+  }, [selectedFolderId, trips]);
+  const folderCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    let unfiled = 0;
+    trips.forEach((trip) => {
+      if (trip.folder_id) counts.set(trip.folder_id, (counts.get(trip.folder_id) ?? 0) + 1);
+      else unfiled += 1;
+    });
+    return { counts, unfiled };
+  }, [trips]);
   const activeStop = useMemo(
     () => detail?.stops.find((stop) => stop.id === selectedStopId) ?? null,
     [detail?.stops, selectedStopId]
@@ -132,6 +166,39 @@ export function App() {
       lng: stops.reduce((sum, stop) => sum + stop.lng, 0) / stops.length
     };
   }, [currentTrip?.stops, detail?.stops]);
+  const searchAnchor = useMemo(
+    () => (activeStop ? { lat: activeStop.lat, lng: activeStop.lng } : tripCenter),
+    [activeStop, tripCenter]
+  );
+  const searchAnchorLabel = activeStop
+    ? activeStop.title
+    : detail?.stops.length
+      ? detail.trip.title
+      : "the map";
+
+  useEffect(() => {
+    if (!user || !trips.length) return;
+    if (filteredTrips.length && (!selectedTripId || !filteredTrips.some((trip) => trip.id === selectedTripId))) {
+      setSelectedTripId(filteredTrips[0]!.id);
+      return;
+    }
+    if (!filteredTrips.length && selectedFolderId !== "all") {
+      setSelectedTripId(null);
+    }
+  }, [filteredTrips, selectedFolderId, selectedTripId, trips.length, user]);
+
+  useEffect(() => {
+    if (!detail) return;
+    setTripTitleDraft(detail.trip.title);
+    setTripDescriptionDraft(detail.trip.description);
+    setTripFolderDraft(detail.trip.folder_id ?? "");
+  }, [detail]);
+
+  useEffect(() => {
+    if (!activeStop && destinationScope === "branch") {
+      setDestinationScope("main");
+    }
+  }, [activeStop, destinationScope]);
 
   useEffect(() => {
     if (!activeStop || editingStop) return;
@@ -150,7 +217,7 @@ export function App() {
     setSearchingPlaces(true);
     const timer = window.setTimeout(() => {
       api
-        .searchPlaces(query, tripCenter)
+        .searchPlaces(query, searchAnchor)
         .then(({ places }) => {
           if (!cancelled) setPlaceResults(places);
         })
@@ -165,7 +232,7 @@ export function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [placeQuery, selectedTripId, tripCenter, user]);
+  }, [placeQuery, searchAnchor, selectedTripId, user]);
 
   async function handleAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -195,6 +262,15 @@ export function App() {
     setShowCreateTrip(true);
   }
 
+  function selectTripId(id: string) {
+    setSelectedTripId(id);
+    setPlaceDraft(null);
+    setPlaceQuery("");
+    setDraftTitle("");
+    setDraftNote("");
+    setDestinationScope("main");
+  }
+
   async function createTrip(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -211,6 +287,7 @@ export function App() {
       setShowCreateTrip(false);
       setPlaceDraft(null);
       setPlaceQuery("");
+      if (newTripFolderId) setSelectedFolderId(newTripFolderId);
       await load();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
@@ -223,6 +300,9 @@ export function App() {
     setPlaceDraft(place);
     setDraftTitle(place.name);
     setDraftNote("");
+    if (activeStop && currentTrip?.type === "one_destination") {
+      setDestinationScope("branch");
+    }
   }
 
   async function previewMapPin(lat: number, lng: number) {
@@ -259,13 +339,15 @@ export function App() {
         note: draftNote.trim(),
         lat: placeDraft.lat,
         lng: placeDraft.lng,
-        sortOrder
+        sortOrder,
+        branchOf: destinationScope === "branch" && activeStop ? activeStop.id : null
       });
       setDetail(await api.trip(selectedTripId));
       setSelectedStopId(stop.id);
       setPlaceDraft(null);
       setDraftTitle("");
       setDraftNote("");
+      setDestinationScope("main");
       await load();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
@@ -294,6 +376,26 @@ export function App() {
       await api.addNote(selectedTripId, noteDraft.trim(), selectedStopId);
       setNoteDraft("");
       setDetail(await api.trip(selectedTripId));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveTripEdits() {
+    if (!selectedTripId || !detail) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateTrip(selectedTripId, {
+        title: tripTitleDraft.trim() || detail.trip.title,
+        description: tripDescriptionDraft.trim(),
+        folderId: tripFolderDraft || null
+      });
+      setEditingTrip(false);
+      setDetail(await api.trip(selectedTripId));
+      await load();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -364,6 +466,11 @@ export function App() {
     if (media) bits.push(`${media} media`);
     if (notes) bits.push(`${notes} notes`);
     return bits.join(" · ");
+  }
+
+  function branchParentTitle(stop: Stop) {
+    if (!stop.branch_of) return null;
+    return detail?.stops.find((item) => item.id === stop.branch_of)?.title ?? "another stop";
   }
 
   if (shareToken) {
@@ -495,41 +602,63 @@ export function App() {
             onClick={async () => {
               const title = window.prompt("Folder name");
               if (!title) return;
-              await api.createFolder(title, "#16a34a");
+              const { folder } = await api.createFolder(title, "#16a34a");
+              setSelectedFolderId(folder.id);
               await load();
             }}
           >
             <FolderPlus size={16} /> Folder
           </button>
+          <button
+            className={selectedFolderId === "all" ? "folder-pill active" : "folder-pill"}
+            onClick={() => setSelectedFolderId("all")}
+            type="button"
+          >
+            <ListFilter size={14} /> All <small>{trips.length}</small>
+          </button>
+          <button
+            className={selectedFolderId === "unfiled" ? "folder-pill active" : "folder-pill"}
+            onClick={() => setSelectedFolderId("unfiled")}
+            type="button"
+          >
+            Unfiled <small>{folderCounts.unfiled}</small>
+          </button>
           {folders.map((folder) => (
-            <span key={folder.id} className="folder-pill" style={{ borderColor: folder.color }}>
-              {folder.title}
-            </span>
+            <button
+              key={folder.id}
+              className={selectedFolderId === folder.id ? "folder-pill active" : "folder-pill"}
+              style={{ borderColor: folder.color }}
+              onClick={() => setSelectedFolderId(folder.id)}
+              type="button"
+            >
+              {folder.title} <small>{folderCounts.counts.get(folder.id) ?? 0}</small>
+            </button>
           ))}
         </section>
 
         <section className="trip-list">
-          {trips.map((trip) => (
+          {filteredTrips.map((trip) => (
             <button
               key={trip.id}
               className={trip.id === selectedTripId ? "trip-card active" : "trip-card"}
-              onClick={() => setSelectedTripId(trip.id)}
+              onClick={() => selectTripId(trip.id)}
             >
               <span>{trip.type === "road_trip" ? <Route size={16} /> : <MapPin size={16} />}</span>
               <strong>{trip.title}</strong>
               <small>{trip.stops.length} stops{trip.folder_title ? ` · ${trip.folder_title}` : ""}</small>
             </button>
           ))}
+          {!filteredTrips.length ? <p className="muted sidebar-empty">No trips in this folder.</p> : null}
         </section>
       </aside>
 
       <section className="map-stage">
         <TripMap
-          trips={trips}
+          trips={filteredTrips}
           selectedTripId={selectedTripId}
           selectedStopId={selectedStopId}
           previewPlace={placeDraft}
-          onSelectTrip={setSelectedTripId}
+          onSelectTrip={selectTripId}
           onSelectStop={setSelectedStopId}
           onMapClick={previewMapPin}
         />
@@ -538,11 +667,64 @@ export function App() {
       <aside className="detail-panel">
         {detail ? (
           <>
-            <div>
-              <p className="eyebrow">{detail.trip.type === "road_trip" ? "Road trip" : "One destination"}</p>
-              <h2>{detail.trip.title}</h2>
-              <p>{detail.trip.description}</p>
-            </div>
+            <section className="trip-summary">
+              <div className="context-top">
+                <div>
+                  <p className="eyebrow">{detail.trip.type === "road_trip" ? "Road trip" : "One destination"}</p>
+                  <h2>{detail.trip.title}</h2>
+                </div>
+                <button
+                  className="icon-button mini-button"
+                  onClick={() => setEditingTrip(true)}
+                  title="Edit trip"
+                  type="button"
+                >
+                  <Pencil size={15} />
+                </button>
+              </div>
+              {editingTrip ? (
+                <div className="stop-editor">
+                  <input
+                    value={tripTitleDraft}
+                    onChange={(event) => setTripTitleDraft(event.target.value)}
+                    placeholder="Trip name"
+                  />
+                  <textarea
+                    value={tripDescriptionDraft}
+                    onChange={(event) => setTripDescriptionDraft(event.target.value)}
+                    placeholder="Short description"
+                    rows={3}
+                  />
+                  <select value={tripFolderDraft} onChange={(event) => setTripFolderDraft(event.target.value)}>
+                    <option value="">No folder</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.title}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="editor-actions">
+                    <button className="wide-button" onClick={saveTripEdits} disabled={busy} type="button">
+                      <Check size={16} /> Save
+                    </button>
+                    <button
+                      className="wide-button subtle"
+                      onClick={() => {
+                        setEditingTrip(false);
+                        setTripTitleDraft(detail.trip.title);
+                        setTripDescriptionDraft(detail.trip.description);
+                        setTripFolderDraft(detail.trip.folder_id ?? "");
+                      }}
+                      type="button"
+                    >
+                      <X size={16} /> Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p>{detail.trip.description}</p>
+              )}
+            </section>
 
             <div className="stats-grid">
               <span><MapPin /> {detail.stops.length} stops</span>
@@ -613,6 +795,11 @@ export function App() {
                 ) : (
                   <>
                     <small>{stopSubtitle(activeStop)}</small>
+                    {branchParentTitle(activeStop) ? (
+                      <small className="branch-label">
+                        <GitBranch size={13} /> Side trip from {branchParentTitle(activeStop)}
+                      </small>
+                    ) : null}
                     {activeStop.note ? <p>{activeStop.note}</p> : null}
                   </>
                 )}
@@ -630,6 +817,7 @@ export function App() {
                 <div>
                   <p className="eyebrow">Add destination</p>
                   <h3>Find a place</h3>
+                  <small className="anchor-label">Near {searchAnchorLabel}</small>
                 </div>
                 {searchingPlaces ? <Loader2 className="spin" size={18} /> : <Search size={18} />}
               </div>
@@ -642,15 +830,13 @@ export function App() {
                 />
               </div>
               <div className="quick-chips">
-                {["hotel", "resort", "landmark", "airport", "beach", "park"].map((label) => (
+                {placeChips.map((chip) => (
                   <button
-                    key={label}
-                    onClick={() =>
-                      setPlaceQuery(activeStop ? `${label} near ${activeStop.title}` : `${label} ${detail.trip.title}`)
-                    }
+                    key={chip.label}
+                    onClick={() => setPlaceQuery(chip.query)}
                     type="button"
                   >
-                    {label}
+                    {chip.label}
                   </button>
                 ))}
               </div>
@@ -693,9 +879,44 @@ export function App() {
                     placeholder="Short note"
                     rows={3}
                   />
-                  <button className="wide-button" onClick={addStopFromDraft} disabled={busy}>
-                    <Check size={16} /> Add to trip
-                  </button>
+                  <div className="scope-toggle">
+                    <button
+                      className={destinationScope === "main" ? "scope-option active" : "scope-option"}
+                      onClick={() => setDestinationScope("main")}
+                      type="button"
+                    >
+                      <Route size={15} /> Main stop
+                    </button>
+                    <button
+                      className={destinationScope === "branch" ? "scope-option active" : "scope-option"}
+                      onClick={() => setDestinationScope("branch")}
+                      disabled={!activeStop}
+                      type="button"
+                    >
+                      <GitBranch size={15} /> Side trip
+                    </button>
+                  </div>
+                  {destinationScope === "branch" && activeStop ? (
+                    <small className="draft-hint">Branches from {activeStop.title}</small>
+                  ) : null}
+                  <div className="draft-actions">
+                    <button className="wide-button" onClick={addStopFromDraft} disabled={busy}>
+                      <Check size={16} /> {destinationScope === "branch" ? "Add side trip" : "Add stop"}
+                    </button>
+                    <button
+                      className="icon-button"
+                      onClick={() => {
+                        setPlaceDraft(null);
+                        setDraftTitle("");
+                        setDraftNote("");
+                        setDestinationScope("main");
+                      }}
+                      title="Clear draft"
+                      type="button"
+                    >
+                      <X size={17} />
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </section>
@@ -757,6 +978,11 @@ export function App() {
                   <button className="stop-main" onClick={() => setSelectedStopId(stop.id)} type="button">
                     <strong>{stop.title}</strong>
                     <small>{stopSubtitle(stop)}</small>
+                    {branchParentTitle(stop) ? (
+                      <span className="branch-label">
+                        <GitBranch size={13} /> From {branchParentTitle(stop)}
+                      </span>
+                    ) : null}
                     {stop.note ? <p>{stop.note}</p> : null}
                   </button>
                   <div className="stop-actions">
