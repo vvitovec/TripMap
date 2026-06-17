@@ -532,12 +532,12 @@ export function App() {
     setPlaceDraft(null);
   }
 
-  function prepareDestinationFromStop(stop: Stop, scope: DestinationScope) {
+  function prepareDestinationFromStop(stop: Stop, scope: DestinationScope, mode: DestinationMode = "nearby", query = "") {
     selectStopId(stop.id);
     resetDestinationDraft();
     setDestinationScope(scope);
-    setDestinationMode("nearby");
-    setPlaceQuery("");
+    setDestinationMode(mode);
+    setPlaceQuery(query);
     setError(null);
     scrollToDestinationPanel();
   }
@@ -1017,7 +1017,7 @@ export function App() {
         </div>
         {variant === "main" ? (
           <div className="stop-quick-actions">
-            <button onClick={() => prepareDestinationFromStop(stop, "main")} disabled={busy} type="button">
+            <button onClick={() => prepareDestinationFromStop(stop, "main", "search")} disabled={busy} type="button">
               <Plus size={14} /> Add after
             </button>
             <button onClick={() => prepareDestinationFromStop(stop, "branch")} disabled={busy} type="button">
@@ -1395,6 +1395,29 @@ export function App() {
                       </small>
                     ) : null}
                     {activeStop.note ? <p>{activeStop.note}</p> : null}
+                    <div className="active-stop-actions">
+                      <button
+                        onClick={() => prepareDestinationFromStop(activeStop, "main", "search")}
+                        disabled={busy}
+                        type="button"
+                      >
+                        <Route size={14} /> Next stop
+                      </button>
+                      <button
+                        onClick={() => prepareDestinationFromStop(activeStop, "branch", "nearby", "landmark")}
+                        disabled={busy}
+                        type="button"
+                      >
+                        <Compass size={14} /> Nearby ideas
+                      </button>
+                      <button
+                        onClick={() => prepareDestinationFromStop(activeStop, "branch", "nearby")}
+                        disabled={busy}
+                        type="button"
+                      >
+                        <GitBranch size={14} /> Side trip
+                      </button>
+                    </div>
                   </>
                 )}
               </section>
