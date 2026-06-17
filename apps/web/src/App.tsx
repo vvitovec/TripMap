@@ -1586,6 +1586,27 @@ export function App() {
     return "Main route at the end";
   }
 
+  function queuedAddLabel() {
+    const count = routeQueue.length;
+    if (destinationScope === "branch" && destinationBranchParent) {
+      return `Add ${count} side trip${count === 1 ? "" : "s"}`;
+    }
+    if (destinationScope === "main" && routeInsertionAnchor) {
+      return `Insert ${count} stop${count === 1 ? "" : "s"}`;
+    }
+    return `Add ${count} to route`;
+  }
+
+  function queuedCommitHint() {
+    if (destinationScope === "branch" && destinationBranchParent) {
+      return `Creates side trips under ${destinationBranchParent.title} in the order shown.`;
+    }
+    if (destinationScope === "main" && routeInsertionAnchor) {
+      return `Inserts after ${routeInsertionAnchor.title} and shifts later stops down.`;
+    }
+    return "Adds these destinations to the end of the main route in the order shown.";
+  }
+
   function mediaLocationLabel(item: MediaItem) {
     const coordinates =
       typeof item.latitude === "number" && typeof item.longitude === "number"
@@ -2622,7 +2643,7 @@ export function App() {
                   </div>
                   <div className="route-queue-actions">
                     <button className="wide-button" onClick={addQueuedPlaces} disabled={busy || Boolean(queuedTimeErrors.size)}>
-                      <Plus size={16} /> Add all to route
+                      <Plus size={16} /> {queuedAddLabel()}
                     </button>
                     <button
                       className="wide-button subtle"
@@ -2636,6 +2657,7 @@ export function App() {
                       <X size={16} /> Clear queue
                     </button>
                   </div>
+                  <small className="route-queue-hint">{queuedCommitHint()}</small>
                 </div>
               ) : null}
 

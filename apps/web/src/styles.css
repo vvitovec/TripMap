@@ -1242,6 +1242,12 @@ textarea {
   gap: 8px;
 }
 
+.route-queue-hint {
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .draft-map-row {
   display: grid;
   grid-template-columns: 20px 1fr;
