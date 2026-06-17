@@ -678,6 +678,29 @@ export function App() {
     });
   }
 
+  function optimizeQueuedPlaces() {
+    setRouteQueue((items) => {
+      if (items.length < 3) return items;
+      const remaining = [...items];
+      const ordered: PlaceSearchResult[] = [];
+      let cursor: { lat: number; lng: number } | null = queueAnchor;
+      while (remaining.length) {
+        const origin = cursor;
+        const nextIndex = origin
+          ? remaining.reduce((bestIndex, place, index) => {
+              const best = remaining[bestIndex]!;
+              return distanceKm(origin, place) < distanceKm(origin, best) ? index : bestIndex;
+            }, 0)
+          : 0;
+        const [next] = remaining.splice(nextIndex, 1);
+        if (!next) break;
+        ordered.push(next);
+        cursor = next;
+      }
+      return ordered;
+    });
+  }
+
   async function addQueuedPlaces() {
     if (!selectedTripId || !routeQueue.length) return;
     setBusy(true);
@@ -1580,6 +1603,14 @@ export function App() {
                   <div className="route-queue-actions">
                     <button className="wide-button" onClick={addQueuedPlaces} disabled={busy}>
                       <Plus size={16} /> Add all to route
+                    </button>
+                    <button
+                      className="wide-button subtle"
+                      onClick={optimizeQueuedPlaces}
+                      disabled={busy || routeQueue.length < 3}
+                      type="button"
+                    >
+                      <Route size={16} /> Optimize order
                     </button>
                     <button className="wide-button subtle" onClick={() => setRouteQueue([])} disabled={busy} type="button">
                       <X size={16} /> Clear queue
