@@ -49,6 +49,24 @@ function mediaThumbUrl(item: MediaItem) {
   return item.thumbnailUrl ?? item.optimizedUrl ?? item.originalUrl ?? undefined;
 }
 
+function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const radiusKm = 6371;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const deltaLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const deltaLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const h =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+  return radiusKm * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function formatDistance(km: number) {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  if (km < 10) return `${km.toFixed(1)} km`;
+  return `${Math.round(km)} km`;
+}
+
 export function App() {
   const shareToken = location.pathname.startsWith("/share/")
     ? location.pathname.split("/share/")[1]
@@ -153,11 +171,45 @@ export function App() {
     () => [...(detail?.stops ?? [])].sort((a, b) => a.sort_order - b.sort_order),
     [detail?.stops]
   );
+  const mainStops = useMemo(() => orderedStops.filter((stop) => !stop.branch_of), [orderedStops]);
+  const branchStops = useMemo(() => orderedStops.filter((stop) => stop.branch_of), [orderedStops]);
   const stopById = useMemo(() => {
     const stops = new Map<string, Stop>();
     detail?.stops.forEach((stop) => stops.set(stop.id, stop));
     return stops;
   }, [detail?.stops]);
+  const sideTripsByParent = useMemo(() => {
+    const groups = new Map<string, Stop[]>();
+    branchStops.forEach((stop) => {
+      if (!stop.branch_of) return;
+      groups.set(stop.branch_of, [...(groups.get(stop.branch_of) ?? []), stop]);
+    });
+    return groups;
+  }, [branchStops]);
+  const orphanBranchStops = useMemo(
+    () =>
+      branchStops.filter((stop) => {
+        const parent = stop.branch_of ? stopById.get(stop.branch_of) : null;
+        return !parent || Boolean(parent.branch_of);
+      }),
+    [branchStops, stopById]
+  );
+  const mainRouteKm = useMemo(
+    () =>
+      mainStops.reduce((sum, stop, index) => {
+        const previous = mainStops[index - 1];
+        return previous ? sum + distanceKm(previous, stop) : sum;
+      }, 0),
+    [mainStops]
+  );
+  const branchDistanceKm = useMemo(
+    () =>
+      branchStops.reduce((sum, stop) => {
+        const parent = stop.branch_of ? stopById.get(stop.branch_of) : null;
+        return parent ? sum + distanceKm(parent, stop) : sum;
+      }, 0),
+    [branchStops, stopById]
+  );
   const stopMediaCounts = useMemo(() => {
     const counts = new Map<string, number>();
     detail?.media.forEach((item) => {
@@ -189,6 +241,11 @@ export function App() {
     : detail?.stops.length
       ? detail.trip.title
       : "the map";
+  const routeIndexByStopId = useMemo(() => {
+    const indexes = new Map<string, number>();
+    orderedStops.forEach((stop, index) => indexes.set(stop.id, index));
+    return indexes;
+  }, [orderedStops]);
   const activeMemoryScope = activeStop && memoryScope === "active" ? "active" : "all";
   const visibleMedia = useMemo(() => {
     if (!detail) return [];
@@ -545,6 +602,56 @@ export function App() {
     return stopById.get(stop.branch_of)?.title ?? "another stop";
   }
 
+  function placeDistanceLabel(place: PlaceSearchResult) {
+    if (!searchAnchor) return null;
+    return `${formatDistance(distanceKm(searchAnchor, place))} away`;
+  }
+
+  function renderStopCard(stop: Stop, variant: "main" | "branch" = "main") {
+    const index = routeIndexByStopId.get(stop.id) ?? 0;
+    return (
+      <article
+        key={stop.id}
+        className={[
+          stop.id === selectedStopId ? "stop-card active" : "stop-card",
+          variant === "branch" ? "branch-stop-card" : ""
+        ].filter(Boolean).join(" ")}
+      >
+        <button className="stop-main" onClick={() => selectStopId(stop.id)} type="button">
+          <strong>{stop.title}</strong>
+          <small>{stopSubtitle(stop)}</small>
+          {branchParentTitle(stop) ? (
+            <span className="branch-label">
+              <GitBranch size={13} /> From {branchParentTitle(stop)}
+            </span>
+          ) : null}
+          {stop.note ? <p>{stop.note}</p> : null}
+        </button>
+        <div className="stop-actions">
+          <GripVertical size={16} />
+          <button
+            className="icon-button mini-button"
+            onClick={() => moveStop(stop, -1)}
+            disabled={busy || index === 0}
+            title="Move stop up"
+            type="button"
+          >
+            <ChevronUp size={15} />
+          </button>
+          <button
+            className="icon-button mini-button"
+            onClick={() => moveStop(stop, 1)}
+            disabled={busy || index === orderedStops.length - 1}
+            title="Move stop down"
+            type="button"
+          >
+            <ChevronDown size={15} />
+          </button>
+        </div>
+      </article>
+    );
+  }
+
   if (shareToken) {
     return (
       <main className="share-screen">
@@ -801,6 +908,11 @@ export function App() {
             <div className="stats-grid">
               <span><MapPin /> {detail.stops.length} stops</span>
               <span><Image /> {mediaCount} media</span>
+              <span><Route /> {mainRouteKm ? formatDistance(mainRouteKm) : "0 m"} route</span>
+              <span>
+                <GitBranch /> {branchStops.length} side trips
+                {branchDistanceKm ? ` · ${formatDistance(branchDistanceKm)}` : ""}
+              </span>
             </div>
 
             {activeStop ? (
@@ -925,7 +1037,11 @@ export function App() {
                       <MapPin size={16} />
                       <span>
                         <strong>{place.name}</strong>
-                        <small>{place.category} · {place.label}</small>
+                        <small>
+                          {place.category}
+                          {placeDistanceLabel(place) ? ` · ${placeDistanceLabel(place)}` : ""}
+                        </small>
+                        <small>{place.label}</small>
                       </span>
                     </button>
                   ))}
@@ -938,7 +1054,10 @@ export function App() {
                 <div className="draft-stop">
                   <div className="draft-map-row">
                     <Crosshair size={17} />
-                    <span>{placeDraft.label}</span>
+                    <span>
+                      {placeDraft.label}
+                      {placeDistanceLabel(placeDraft) ? <small>{placeDistanceLabel(placeDraft)} from {searchAnchorLabel}</small> : null}
+                    </span>
                   </div>
                   <input
                     value={draftTitle}
@@ -1087,44 +1206,39 @@ export function App() {
             </button>
 
             <div className="timeline">
-              {orderedStops.map((stop, index) => (
-                <article
-                  key={stop.id}
-                  className={stop.id === selectedStopId ? "stop-card active" : "stop-card"}
-                >
-                  <button className="stop-main" onClick={() => selectStopId(stop.id)} type="button">
-                    <strong>{stop.title}</strong>
-                    <small>{stopSubtitle(stop)}</small>
-                    {branchParentTitle(stop) ? (
-                      <span className="branch-label">
-                        <GitBranch size={13} /> From {branchParentTitle(stop)}
-                      </span>
-                    ) : null}
-                    {stop.note ? <p>{stop.note}</p> : null}
-                  </button>
-                  <div className="stop-actions">
-                    <GripVertical size={16} />
-                    <button
-                      className="icon-button mini-button"
-                      onClick={() => moveStop(stop, -1)}
-                      disabled={busy || index === 0}
-                      title="Move stop up"
-                      type="button"
-                    >
-                      <ChevronUp size={15} />
-                    </button>
-                    <button
-                      className="icon-button mini-button"
-                      onClick={() => moveStop(stop, 1)}
-                      disabled={busy || index === orderedStops.length - 1}
-                      title="Move stop down"
-                      type="button"
-                    >
-                      <ChevronDown size={15} />
-                    </button>
+              {mainStops.length ? (
+                mainStops.map((stop, index) => {
+                  const children = sideTripsByParent.get(stop.id) ?? [];
+                  const previous = mainStops[index - 1];
+                  return (
+                    <section className="route-stop-group" key={stop.id}>
+                      <div className="route-step-label">
+                        <span>{index + 1}</span>
+                        <small>{previous ? formatDistance(distanceKm(previous, stop)) : "Start"}</small>
+                      </div>
+                      {renderStopCard(stop)}
+                      {children.length ? (
+                        <div className="branch-stop-list">
+                          {children.map((child) => renderStopCard(child, "branch"))}
+                        </div>
+                      ) : null}
+                    </section>
+                  );
+                })
+              ) : (
+                <p className="muted">Add a destination to start the route.</p>
+              )}
+              {orphanBranchStops.length ? (
+                <section className="route-stop-group">
+                  <div className="route-step-label">
+                    <GitBranch size={15} />
+                    <small>Side trips</small>
                   </div>
-                </article>
-              ))}
+                  <div className="branch-stop-list">
+                    {orphanBranchStops.map((stop) => renderStopCard(stop, "branch"))}
+                  </div>
+                </section>
+              ) : null}
             </div>
 
           </>
