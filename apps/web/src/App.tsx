@@ -512,6 +512,15 @@ export function App() {
   const canAdvancePreset = Boolean(activePreset && activePresetStep < activePreset.steps.length - 1);
   const canQueueTopForPreset = Boolean(topVisiblePlace && !queuedPlaceIds.has(topVisiblePlace.id) && !topVisibleSavedStop);
   const planningActivePreset = Boolean(activePreset && planningPresetId === activePreset.id);
+  const routeStarterPresets = useMemo(() => {
+    const preferredIds =
+      currentTrip?.type === "road_trip"
+        ? ["road-leg", "nature-loop", "city-day"]
+        : ["weekend-base", "city-day", "nature-loop"];
+    return preferredIds
+      .map((id) => destinationPresets.find((preset) => preset.id === id))
+      .filter((preset): preset is DestinationPreset => Boolean(preset));
+  }, [currentTrip?.type]);
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     routeQueue.forEach((item) => previews.set(item.place.id, item.place));
@@ -888,9 +897,10 @@ export function App() {
     setError(null);
   }
 
-  async function buildActivePresetQueue() {
-    if (!activePreset || !selectedTripId) return;
-    setPlanningPresetId(activePreset.id);
+  async function buildPresetQueue(preset: DestinationPreset | null = activePreset) {
+    if (!preset || !selectedTripId) return;
+    setActivePresetId(preset.id);
+    setPlanningPresetId(preset.id);
     setDestinationMode("nearby");
     setError(null);
 
@@ -899,10 +909,10 @@ export function App() {
     let cursor: { lat: number; lng: number } | undefined = queueAnchor ?? searchAnchor ?? undefined;
     let lastPlaces: PlaceSearchResult[] = [];
     let lastStepIndex = activePresetStep;
-    let lastQuery = activePreset.steps[activePresetStep]?.query ?? activePreset.steps[0]?.query ?? "";
+    let lastQuery = preset.steps[activePresetStep]?.query ?? preset.steps[0]?.query ?? "";
 
     try {
-      for (const [index, step] of activePreset.steps.entries()) {
+      for (const [index, step] of preset.steps.entries()) {
         const { places } = await api.searchPlaces(step.query, cursor);
         lastPlaces = places;
         lastStepIndex = index;
@@ -2218,7 +2228,7 @@ export function App() {
                       </div>
                       <div className="destination-plan-actions">
                         <button
-                          onClick={buildActivePresetQueue}
+                          onClick={() => buildPresetQueue()}
                           disabled={busy || planningActivePreset}
                           type="button"
                         >
@@ -2884,6 +2894,23 @@ export function App() {
                     <button onClick={() => openDestinationMode("coordinates")} type="button">
                       <Crosshair size={14} /> Pin
                     </button>
+                  </div>
+                  <div className="route-empty-plans">
+                    <span>Starter plans</span>
+                    <div>
+                      {routeStarterPresets.map((preset) => (
+                        <button
+                          key={preset.id}
+                          onClick={() => buildPresetQueue(preset)}
+                          disabled={busy || planningPresetId === preset.id}
+                          type="button"
+                        >
+                          {planningPresetId === preset.id ? <Loader2 className="spin" size={13} /> : <Route size={13} />}
+                          <strong>{preset.title}</strong>
+                          <small>{preset.hint}</small>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </section>
               )}
