@@ -1847,6 +1847,19 @@ export function App() {
                       onKeyDown={handlePlaceSearchKeyDown}
                       placeholder="Address, hotel, landmark, coordinates"
                     />
+                    {placeQuery ? (
+                      <button
+                        onClick={() => {
+                          setPlaceQuery("");
+                          setPlaceResults([]);
+                          setPlaceResultFilter("all");
+                        }}
+                        type="button"
+                        title="Clear search"
+                      >
+                        <X size={15} />
+                      </button>
+                    ) : null}
                   </div>
                   {destinationMode === "nearby" ? (
                     <div className="nearby-groups">
