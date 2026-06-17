@@ -29,6 +29,7 @@ import type { Folder, MediaItem, Note, PlaceSearchResult, Stop, Trip, TripDetail
 type AuthMode = "login" | "register";
 type DestinationScope = "main" | "branch";
 type MemoryScope = "active" | "all";
+type ShareStatus = "idle" | "copied";
 
 const placeChips = [
   { label: "Hotels", query: "hotel" },
@@ -96,6 +97,7 @@ export function App() {
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [memoryScope, setMemoryScope] = useState<MemoryScope>("active");
+  const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
   const [editingTrip, setEditingTrip] = useState(false);
   const [tripTitleDraft, setTripTitleDraft] = useState("");
   const [tripDescriptionDraft, setTripDescriptionDraft] = useState("");
@@ -539,6 +541,35 @@ export function App() {
     }
   }
 
+  async function copyShareLink() {
+    if (!detail) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { share } = await api.share(detail.trip.id);
+      const url = `${location.origin}/share/${share.token}`;
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        const textarea = document.createElement("textarea");
+        textarea.value = url;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setShareStatus("copied");
+      window.setTimeout(() => setShareStatus("idle"), 2400);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveTripEdits() {
     if (!selectedTripId || !detail) return;
     setBusy(true);
@@ -704,16 +735,46 @@ export function App() {
               <div className="stats-grid">
                 <span><MapPin /> {detail.stops.length} stops</span>
                 <span><Image /> {detail.media.length} media</span>
+                <span><Route /> {mainRouteKm ? formatDistance(mainRouteKm) : "0 m"} route</span>
+                <span>
+                  <GitBranch /> {branchStops.length} side trips
+                  {branchDistanceKm ? ` · ${formatDistance(branchDistanceKm)}` : ""}
+                </span>
               </div>
-              <div className="presentation-media compact">
-                {detail.media.map((item) =>
-                  item.kind === "video" ? (
-                    <video key={item.id} src={item.optimizedUrl ?? item.originalUrl ?? undefined} controls />
-                  ) : (
-                    <img key={item.id} src={item.optimizedUrl ?? item.originalUrl ?? undefined} alt={item.file_name} />
-                  )
-                )}
-              </div>
+              {presentationGroups.length ? (
+                <div className="share-story">
+                  {presentationGroups.map((group) => (
+                    <section className="share-stop" key={group.id}>
+                      <div>
+                        <p className="eyebrow">{group.subtitle}</p>
+                        <h3>{group.title}</h3>
+                      </div>
+                      {group.notes.length ? (
+                        <div className="note-list">
+                          {group.notes.map((note) => (
+                            <article key={note.id}>
+                              <p>{note.body}</p>
+                            </article>
+                          ))}
+                        </div>
+                      ) : null}
+                      {group.media.length ? (
+                        <div className="presentation-media compact">
+                          {group.media.map((item) =>
+                            item.kind === "video" ? (
+                              <video key={item.id} src={mediaUrl(item)} controls />
+                            ) : (
+                              <img key={item.id} src={mediaUrl(item)} alt={item.file_name} />
+                            )
+                          )}
+                        </div>
+                      ) : null}
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">No notes, photos, or videos have been added yet.</p>
+              )}
             </aside>
           </section>
         ) : (
@@ -1229,12 +1290,11 @@ export function App() {
             </button>
             <button
               className="wide-button subtle"
-              onClick={async () => {
-                const { share } = await api.share(detail.trip.id);
-                await navigator.clipboard.writeText(`${location.origin}/share/${share.token}`);
-              }}
+              onClick={copyShareLink}
+              disabled={busy}
             >
-              <Share2 size={16} /> Copy share link
+              {shareStatus === "copied" ? <Check size={16} /> : <Share2 size={16} />}
+              {shareStatus === "copied" ? "Copied share link" : "Copy share link"}
             </button>
 
             <div className="timeline">

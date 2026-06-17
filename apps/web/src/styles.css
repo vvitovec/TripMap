@@ -74,6 +74,28 @@ button {
   margin-top: 18px;
 }
 
+.share-story {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.share-stop {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #dde4df;
+  padding-top: 14px;
+}
+
+.share-stop h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.share-stop .presentation-media.compact {
+  margin-top: 0;
+}
+
 .auth-panel {
   width: min(430px, 100%);
   background: rgba(255, 255, 255, 0.92);
