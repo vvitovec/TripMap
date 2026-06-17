@@ -117,6 +117,23 @@ function formatDistance(km: number) {
   return `${Math.round(km)} km`;
 }
 
+function titleize(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function firstAddressPart(address: PlaceSearchResult["address"] | undefined, keys: string[]) {
+  if (!address) return null;
+  for (const key of keys) {
+    const value = address[key];
+    if (value) return value;
+  }
+  return null;
+}
+
 function toDateTimeInputValue(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -1140,6 +1157,31 @@ export function App() {
     return `${formatDistance(distanceKm(searchAnchor, place))} away`;
   }
 
+  function placeKindLabel(place: PlaceSearchResult) {
+    const type = place.type && place.type !== "yes" ? place.type : place.category;
+    return titleize(type || "Place");
+  }
+
+  function placeAreaLabel(place: PlaceSearchResult) {
+    const city = firstAddressPart(place.address, ["city", "town", "village", "municipality", "hamlet"]);
+    const area = firstAddressPart(place.address, ["suburb", "neighbourhood", "quarter", "borough"]);
+    const region = firstAddressPart(place.address, ["state", "county", "region"]);
+    const country = firstAddressPart(place.address, ["country"]);
+    const parts = [area, city, region, country].filter((part, index, list): part is string =>
+      Boolean(part && list.indexOf(part) === index)
+    );
+    return parts.slice(0, 2).join(", ");
+  }
+
+  function placeAddressLabel(place: PlaceSearchResult) {
+    const road = firstAddressPart(place.address, ["road", "pedestrian", "footway", "neighbourhood"]);
+    const houseNumber = firstAddressPart(place.address, ["house_number"]);
+    const city = firstAddressPart(place.address, ["city", "town", "village", "municipality"]);
+    const localAddress = [houseNumber, road].filter(Boolean).join(" ");
+    const parts = [localAddress, city].filter(Boolean);
+    return parts.length ? parts.join(", ") : place.label;
+  }
+
   function destinationPlacementLabel() {
     if (destinationScope === "branch" && activeStop) return `Side trip from ${activeStop.title}`;
     if (destinationScope === "main" && routeInsertionAnchor) return `Main route after ${routeInsertionAnchor.title}`;
@@ -1795,41 +1837,50 @@ export function App() {
 
               {rankedPlaceResults.length > 0 && destinationMode !== "coordinates" ? (
                 <div className="place-results">
-                  {rankedPlaceResults.map((place) => (
-                    <article
-                      key={place.id}
-                      className={placeDraft?.id === place.id ? "place-result active" : "place-result"}
-                    >
-                      <button className="place-result-main" onClick={() => selectPlace(place)} type="button">
-                        <MapPin size={16} />
-                        <span>
-                          <strong>{place.name}</strong>
-                          <small>
-                            {place.category}
-                            {placeDistanceLabel(place) ? ` · ${placeDistanceLabel(place)}` : ""}
-                          </small>
-                          <small>{place.label}</small>
-                        </span>
-                      </button>
-                      <button
-                        className="place-result-add"
-                        onClick={() => addPlaceToRoute(place, place.name, "")}
-                        disabled={busy}
-                        type="button"
+                  <div className="place-results-summary">
+                    <strong>{rankedPlaceResults.length} result{rankedPlaceResults.length === 1 ? "" : "s"}</strong>
+                    <small>Nearest first near {searchAnchorLabel}</small>
+                  </div>
+                  {rankedPlaceResults.map((place) => {
+                    const areaLabel = placeAreaLabel(place);
+                    const distanceLabel = placeDistanceLabel(place);
+                    return (
+                      <article
+                        key={place.id}
+                        className={placeDraft?.id === place.id ? "place-result active" : "place-result"}
                       >
-                        <Plus size={14} /> Add
-                      </button>
-                      <button
-                        className={queuedPlaceIds.has(place.id) ? "place-result-queue active" : "place-result-queue"}
-                        onClick={() => queuePlace(place)}
-                        disabled={busy || queuedPlaceIds.has(place.id)}
-                        type="button"
-                      >
-                        {queuedPlaceIds.has(place.id) ? <Check size={14} /> : <ListFilter size={14} />}
-                        {queuedPlaceIds.has(place.id) ? "Queued" : "Queue"}
-                      </button>
-                    </article>
-                  ))}
+                        <button className="place-result-main" onClick={() => selectPlace(place)} type="button">
+                          <MapPin size={16} />
+                          <span>
+                            <strong>{place.name}</strong>
+                            <span className="place-meta-row">
+                              <span>{placeKindLabel(place)}</span>
+                              {distanceLabel ? <span>{distanceLabel}</span> : null}
+                              {areaLabel ? <span>{areaLabel}</span> : null}
+                            </span>
+                            <small>{placeAddressLabel(place)}</small>
+                          </span>
+                        </button>
+                        <button
+                          className="place-result-add"
+                          onClick={() => addPlaceToRoute(place, place.name, "")}
+                          disabled={busy}
+                          type="button"
+                        >
+                          <Plus size={14} /> Add
+                        </button>
+                        <button
+                          className={queuedPlaceIds.has(place.id) ? "place-result-queue active" : "place-result-queue"}
+                          onClick={() => queuePlace(place)}
+                          disabled={busy || queuedPlaceIds.has(place.id)}
+                          type="button"
+                        >
+                          {queuedPlaceIds.has(place.id) ? <Check size={14} /> : <ListFilter size={14} />}
+                          {queuedPlaceIds.has(place.id) ? "Queued" : "Queue"}
+                        </button>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : destinationMode !== "coordinates" && placeQuery.trim().length >= 3 && !searchingPlaces ? (
                 <div className="search-empty-state">
