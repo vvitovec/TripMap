@@ -241,6 +241,11 @@ export function App() {
     : detail?.stops.length
       ? detail.trip.title
       : "the map";
+  const routeInsertionAnchor = useMemo(() => {
+    if (!activeStop) return null;
+    if (!activeStop.branch_of) return activeStop;
+    return stopById.get(activeStop.branch_of) ?? activeStop;
+  }, [activeStop, stopById]);
   const routeIndexByStopId = useMemo(() => {
     const indexes = new Map<string, number>();
     orderedStops.forEach((stop, index) => indexes.set(stop.id, index));
@@ -433,6 +438,18 @@ export function App() {
     }
   }
 
+  async function makeRoomForSortOrder(sortOrder: number) {
+    if (!selectedTripId) return;
+    const stopsToShift = orderedStops
+      .filter((stop) => stop.sort_order >= sortOrder)
+      .sort((a, b) => b.sort_order - a.sort_order);
+    await Promise.all(
+      stopsToShift.map((stop) =>
+        api.updateStop(selectedTripId, stop.id, { sortOrder: stop.sort_order + 1 })
+      )
+    );
+  }
+
   async function previewMapPin(lat: number, lng: number) {
     if (!selectedTripId) return;
     setBusy(true);
@@ -460,15 +477,26 @@ export function App() {
     if (!selectedTripId || !placeDraft) return;
     setBusy(true);
     setError(null);
-    const sortOrder = detail?.stops.length ?? currentTrip?.stops.length ?? 0;
+    const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
+    let sortOrder = maxSortOrder + 1;
+    const branchParent = destinationScope === "branch" ? activeStop : null;
+    if (destinationScope === "main" && routeInsertionAnchor) {
+      sortOrder = routeInsertionAnchor.sort_order + 1;
+    }
+    if (destinationScope === "branch" && branchParent) {
+      const siblings = sideTripsByParent.get(branchParent.id) ?? [];
+      const lastRelatedStop = [branchParent, ...siblings].sort((a, b) => b.sort_order - a.sort_order)[0];
+      sortOrder = (lastRelatedStop?.sort_order ?? branchParent.sort_order) + 1;
+    }
     try {
+      await makeRoomForSortOrder(sortOrder);
       const { stop } = await api.addStop(selectedTripId, {
         title: draftTitle.trim() || placeDraft.name || `Stop ${sortOrder + 1}`,
         note: draftNote.trim(),
         lat: placeDraft.lat,
         lng: placeDraft.lng,
         sortOrder,
-        branchOf: destinationScope === "branch" && activeStop ? activeStop.id : null
+        branchOf: branchParent ? branchParent.id : null
       });
       setDetail(await api.trip(selectedTripId));
       selectStopId(stop.id);
@@ -605,6 +633,12 @@ export function App() {
   function placeDistanceLabel(place: PlaceSearchResult) {
     if (!searchAnchor) return null;
     return `${formatDistance(distanceKm(searchAnchor, place))} away`;
+  }
+
+  function destinationPlacementLabel() {
+    if (destinationScope === "branch" && activeStop) return `Side trip from ${activeStop.title}`;
+    if (destinationScope === "main" && routeInsertionAnchor) return `Main route after ${routeInsertionAnchor.title}`;
+    return "Main route at the end";
   }
 
   function renderStopCard(stop: Stop, variant: "main" | "branch" = "main") {
@@ -1087,9 +1121,7 @@ export function App() {
                       <GitBranch size={15} /> Side trip
                     </button>
                   </div>
-                  {destinationScope === "branch" && activeStop ? (
-                    <small className="draft-hint">Branches from {activeStop.title}</small>
-                  ) : null}
+                  <small className="draft-hint">{destinationPlacementLabel()}</small>
                   <div className="draft-actions">
                     <button className="wide-button" onClick={addStopFromDraft} disabled={busy}>
                       <Check size={16} /> {destinationScope === "branch" ? "Add side trip" : "Add stop"}
