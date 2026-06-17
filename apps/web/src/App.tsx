@@ -711,6 +711,14 @@ export function App() {
     setPlaceDraft(null);
   }
 
+  function searchAroundDraft(query: string) {
+    if (!placeDraft) return;
+    setSearchOrigin("draft");
+    setDestinationMode("nearby");
+    setPlaceQuery(query);
+    setError(null);
+  }
+
   function searchFromMapCenter() {
     if (!mapFocus) {
       setError("Move the map first, then search around the map center.");
@@ -2123,6 +2131,17 @@ export function App() {
                       {placeDraft.label}
                       {placeDistanceLabel(placeDraft) ? <small>{placeDistanceLabel(placeDraft)} from {searchAnchorLabel}</small> : null}
                     </span>
+                  </div>
+                  <div className="draft-nearby-actions">
+                    <button onClick={() => searchAroundDraft("hotel")} type="button">
+                      <Compass size={14} /> Stays nearby
+                    </button>
+                    <button onClick={() => searchAroundDraft("landmark")} type="button">
+                      <MapPin size={14} /> Sights nearby
+                    </button>
+                    <button onClick={() => searchAroundDraft("restaurant")} type="button">
+                      <Search size={14} /> Food nearby
+                    </button>
                   </div>
                   <input
                     value={draftTitle}
