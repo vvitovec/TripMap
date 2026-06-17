@@ -1122,6 +1122,25 @@ export function App() {
     setSearchOrigin("route");
   }
 
+  function exploreQueuedPlace(item: QueuedPlace) {
+    setPlaceDraft(item.place);
+    setDraftTitle(item.title || item.place.name);
+    setDraftNote(item.note);
+    setDraftArrivedAt(item.arrivedAt);
+    setDraftDepartedAt(item.departedAt);
+    setManualLat(String(Number(item.place.lat.toFixed(6))));
+    setManualLng(String(Number(item.place.lng.toFixed(6))));
+    setManualLabel(item.title || item.place.name);
+    setSearchOrigin("draft");
+    setDestinationMode("nearby");
+    setPlaceQuery("landmark");
+    setActivePresetId(null);
+    setActivePresetStep(0);
+    setPlanningPresetId(null);
+    setError(null);
+    scrollToDestinationPanel();
+  }
+
   function queueTopVisiblePlaces() {
     topQueueablePlaces.forEach((place) => queuePlace(place));
   }
@@ -2499,6 +2518,13 @@ export function App() {
                           ) : null}
                         </div>
                         <div className="queue-row-actions">
+                          <button
+                            onClick={() => exploreQueuedPlace(item)}
+                            type="button"
+                            title="Explore nearby"
+                          >
+                            <Compass size={14} />
+                          </button>
                           <button
                             onClick={() => moveQueuedPlace(item.place.id, -1)}
                             disabled={index === 0}
