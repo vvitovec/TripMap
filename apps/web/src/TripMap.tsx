@@ -7,6 +7,7 @@ type Props = {
   selectedTripId: string | null;
   selectedStopId?: string | null;
   previewPlace?: PlaceSearchResult | null;
+  previewPlaces?: PlaceSearchResult[];
   onSelectTrip: (id: string) => void;
   onSelectStop?: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
@@ -18,6 +19,7 @@ export function TripMap({
   selectedTripId,
   selectedStopId,
   previewPlace,
+  previewPlaces,
   onSelectTrip,
   onSelectStop,
   onMapClick,
@@ -25,6 +27,12 @@ export function TripMap({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const effectivePreviewPlaces = useMemo(() => {
+    const previews = new Map<string, PlaceSearchResult>();
+    previewPlaces?.forEach((place) => previews.set(place.id, place));
+    if (previewPlace) previews.set(previewPlace.id, previewPlace);
+    return [...previews.values()];
+  }, [previewPlace, previewPlaces]);
 
   const geojson = useMemo(() => {
     const pointFeatures = trips.flatMap((trip) =>
@@ -82,27 +90,25 @@ export function TripMap({
         });
         return [...route, ...branches];
       });
-    const previewFeature = previewPlace
-      ? {
-          type: "Feature" as const,
-          properties: {
-            tripId: "",
-            title: previewPlace.name,
-            tripTitle: "Preview",
-            selected: true,
-            preview: true
-          },
-          geometry: {
-            type: "Point" as const,
-            coordinates: [previewPlace.lng, previewPlace.lat]
-          }
-        }
-      : null;
+    const previewFeatures = effectivePreviewPlaces.map((place, index) => ({
+      type: "Feature" as const,
+      properties: {
+        tripId: "",
+        title: effectivePreviewPlaces.length > 1 ? `${index + 1}. ${place.name}` : place.name,
+        tripTitle: "Preview",
+        selected: true,
+        preview: true
+      },
+      geometry: {
+        type: "Point" as const,
+        coordinates: [place.lng, place.lat]
+      }
+    }));
     return {
       type: "FeatureCollection" as const,
-      features: [...lineFeatures, ...pointFeatures, ...(previewFeature ? [previewFeature] : [])]
+      features: [...lineFeatures, ...pointFeatures, ...previewFeatures]
     };
-  }, [previewPlace, selectedStopId, selectedTripId, trips]);
+  }, [effectivePreviewPlaces, selectedStopId, selectedTripId, trips]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -232,12 +238,19 @@ export function TripMap({
   }, [geojson]);
 
   useEffect(() => {
-    if (previewPlace && mapRef.current) {
+    if (effectivePreviewPlaces.length === 1 && mapRef.current) {
+      const place = effectivePreviewPlaces[0]!;
       mapRef.current.flyTo({
-        center: [previewPlace.lng, previewPlace.lat],
+        center: [place.lng, place.lat],
         zoom: Math.max(mapRef.current.getZoom(), 12),
         duration: 850
       });
+      return;
+    }
+    if (effectivePreviewPlaces.length > 1 && mapRef.current) {
+      const bounds = new maplibregl.LngLatBounds();
+      effectivePreviewPlaces.forEach((place) => bounds.extend([place.lng, place.lat]));
+      mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 850 });
       return;
     }
     const trip = trips.find((item) => item.id === selectedTripId);
@@ -245,7 +258,7 @@ export function TripMap({
     const bounds = new maplibregl.LngLatBounds();
     trip.stops.forEach((stop) => bounds.extend([stop.lng, stop.lat]));
     mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 900 });
-  }, [previewPlace, selectedTripId, trips]);
+  }, [effectivePreviewPlaces, selectedTripId, trips]);
 
   return <div ref={containerRef} className="map-canvas" />;
 }

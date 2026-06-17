@@ -276,6 +276,12 @@ export function App() {
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
   }, [placeResults, searchAnchor]);
   const queuedPlaceIds = useMemo(() => new Set(routeQueue.map((place) => place.id)), [routeQueue]);
+  const mapPreviewPlaces = useMemo(() => {
+    const previews = new Map<string, PlaceSearchResult>();
+    routeQueue.forEach((place) => previews.set(place.id, place));
+    if (placeDraft) previews.set(placeDraft.id, placeDraft);
+    return [...previews.values()];
+  }, [placeDraft, routeQueue]);
   const routeInsertionAnchor = useMemo(() => {
     if (!activeStop) return null;
     if (!activeStop.branch_of) return activeStop;
@@ -1174,6 +1180,7 @@ export function App() {
           selectedTripId={selectedTripId}
           selectedStopId={selectedStopId}
           previewPlace={placeDraft}
+          previewPlaces={mapPreviewPlaces}
           onSelectTrip={selectTripId}
           onSelectStop={selectStopId}
           onMapClick={previewMapPin}
