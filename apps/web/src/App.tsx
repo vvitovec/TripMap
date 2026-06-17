@@ -1,5 +1,6 @@
 import {
   Camera,
+  CalendarDays,
   Check,
   ChevronDown,
   ChevronUp,
@@ -204,6 +205,8 @@ export function App() {
   const [newTripTitle, setNewTripTitle] = useState("");
   const [newTripDescription, setNewTripDescription] = useState("");
   const [newTripFolderId, setNewTripFolderId] = useState("");
+  const [newTripStartsAt, setNewTripStartsAt] = useState("");
+  const [newTripEndsAt, setNewTripEndsAt] = useState("");
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [memoryScope, setMemoryScope] = useState<MemoryScope>("active");
@@ -215,6 +218,8 @@ export function App() {
   const [tripTitleDraft, setTripTitleDraft] = useState("");
   const [tripDescriptionDraft, setTripDescriptionDraft] = useState("");
   const [tripFolderDraft, setTripFolderDraft] = useState("");
+  const [tripStartsAtDraft, setTripStartsAtDraft] = useState("");
+  const [tripEndsAtDraft, setTripEndsAtDraft] = useState("");
   const [editingStop, setEditingStop] = useState(false);
   const [stopTitleDraft, setStopTitleDraft] = useState("");
   const [stopNoteDraft, setStopNoteDraft] = useState("");
@@ -273,6 +278,7 @@ export function App() {
   }, [detail, selectedStopId]);
 
   const mediaCount = detail?.media.length ?? 0;
+  const tripTiming = detail ? tripTimingLabel(detail.trip) : null;
   const currentTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
     [selectedTripId, trips]
@@ -417,6 +423,8 @@ export function App() {
     [placeResultFilter, rankedPlaceResults]
   );
   const topVisiblePlace = visiblePlaceResults[0] ?? null;
+  const newTripTimeError = timeRangeError(newTripStartsAt, newTripEndsAt);
+  const tripTimeError = timeRangeError(tripStartsAtDraft, tripEndsAtDraft);
   const draftTimeError = timeRangeError(draftArrivedAt, draftDepartedAt);
   const stopTimeError = timeRangeError(stopArrivedAtDraft, stopDepartedAtDraft);
   const queuedTimeErrors = useMemo(() => {
@@ -532,6 +540,8 @@ export function App() {
     setTripTitleDraft(detail.trip.title);
     setTripDescriptionDraft(detail.trip.description);
     setTripFolderDraft(detail.trip.folder_id ?? "");
+    setTripStartsAtDraft(toDateTimeInputValue(detail.trip.starts_at));
+    setTripEndsAtDraft(toDateTimeInputValue(detail.trip.ends_at));
   }, [detail]);
 
   useEffect(() => {
@@ -658,6 +668,8 @@ export function App() {
     setNewTripTitle(type === "road_trip" ? "Summer road trip" : "Beach weekend");
     setNewTripDescription("");
     setNewTripFolderId("");
+    setNewTripStartsAt("");
+    setNewTripEndsAt("");
     setShowCreateTrip(true);
   }
 
@@ -675,6 +687,10 @@ export function App() {
 
   async function createTrip(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (newTripTimeError) {
+      setError(newTripTimeError);
+      return;
+    }
     setBusy(true);
     try {
       const { trip } = await api.createTrip({
@@ -683,7 +699,9 @@ export function App() {
           newTripDescription.trim() ||
           "Add destinations, notes, photos, and short videos as the trip unfolds.",
         type: newTripType,
-        folderId: newTripFolderId || null
+        folderId: newTripFolderId || null,
+        startsAt: fromDateTimeInputValue(newTripStartsAt),
+        endsAt: fromDateTimeInputValue(newTripEndsAt)
       });
       setSelectedTripId(trip.id);
       setShowCreateTrip(false);
@@ -1120,13 +1138,19 @@ export function App() {
 
   async function saveTripEdits() {
     if (!selectedTripId || !detail) return;
+    if (tripTimeError) {
+      setError(tripTimeError);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await api.updateTrip(selectedTripId, {
         title: tripTitleDraft.trim() || detail.trip.title,
         description: tripDescriptionDraft.trim(),
-        folderId: tripFolderDraft || null
+        folderId: tripFolderDraft || null,
+        startsAt: fromDateTimeInputValue(tripStartsAtDraft),
+        endsAt: fromDateTimeInputValue(tripEndsAtDraft)
       });
       setEditingTrip(false);
       setDetail(await api.trip(selectedTripId));
@@ -1225,6 +1249,15 @@ export function App() {
     if (arrived && departed) return `${arrived} to ${departed}`;
     if (arrived) return `Arrive ${arrived}`;
     if (departed) return `Leave ${departed}`;
+    return null;
+  }
+
+  function tripTimingLabel(trip: Trip) {
+    const starts = formatStopDateTime(trip.starts_at);
+    const ends = formatStopDateTime(trip.ends_at);
+    if (starts && ends) return `${starts} to ${ends}`;
+    if (starts) return `Starts ${starts}`;
+    if (ends) return `Ends ${ends}`;
     return null;
   }
 
@@ -1351,6 +1384,7 @@ export function App() {
               <p>{detail.trip.description}</p>
               <div className="stats-grid">
                 <span><MapPin /> {detail.stops.length} stops</span>
+                {tripTiming ? <span><CalendarDays /> {tripTiming}</span> : null}
                 <span><Image /> {detail.media.length} media</span>
                 <span><Route /> {mainRouteKm ? formatDistance(mainRouteKm) : "0 m"} route</span>
                 <span>
@@ -1473,6 +1507,25 @@ export function App() {
               placeholder="Short description"
               rows={3}
             />
+            <div className="time-row">
+              <label>
+                <span>Starts</span>
+                <input
+                  type="datetime-local"
+                  value={newTripStartsAt}
+                  onChange={(event) => setNewTripStartsAt(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Ends</span>
+                <input
+                  type="datetime-local"
+                  value={newTripEndsAt}
+                  onChange={(event) => setNewTripEndsAt(event.target.value)}
+                />
+              </label>
+            </div>
+            {newTripTimeError ? <small className="field-error">{newTripTimeError}</small> : null}
             <select value={newTripFolderId} onChange={(event) => setNewTripFolderId(event.target.value)}>
               <option value="">No folder</option>
               {folders.map((folder) => (
@@ -1481,7 +1534,7 @@ export function App() {
                 </option>
               ))}
             </select>
-            <button className="wide-button" disabled={busy || !newTripTitle.trim()}>
+            <button className="wide-button" disabled={busy || !newTripTitle.trim() || Boolean(newTripTimeError)}>
               <Check size={16} /> Create trip
             </button>
           </form>
@@ -1589,6 +1642,25 @@ export function App() {
                     placeholder="Short description"
                     rows={3}
                   />
+                  <div className="time-row">
+                    <label>
+                      <span>Starts</span>
+                      <input
+                        type="datetime-local"
+                        value={tripStartsAtDraft}
+                        onChange={(event) => setTripStartsAtDraft(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Ends</span>
+                      <input
+                        type="datetime-local"
+                        value={tripEndsAtDraft}
+                        onChange={(event) => setTripEndsAtDraft(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  {tripTimeError ? <small className="field-error">{tripTimeError}</small> : null}
                   <select value={tripFolderDraft} onChange={(event) => setTripFolderDraft(event.target.value)}>
                     <option value="">No folder</option>
                     {folders.map((folder) => (
@@ -1598,7 +1670,7 @@ export function App() {
                     ))}
                   </select>
                   <div className="editor-actions">
-                    <button className="wide-button" onClick={saveTripEdits} disabled={busy} type="button">
+                    <button className="wide-button" onClick={saveTripEdits} disabled={busy || Boolean(tripTimeError)} type="button">
                       <Check size={16} /> Save
                     </button>
                     <button
@@ -1608,6 +1680,8 @@ export function App() {
                         setTripTitleDraft(detail.trip.title);
                         setTripDescriptionDraft(detail.trip.description);
                         setTripFolderDraft(detail.trip.folder_id ?? "");
+                        setTripStartsAtDraft(toDateTimeInputValue(detail.trip.starts_at));
+                        setTripEndsAtDraft(toDateTimeInputValue(detail.trip.ends_at));
                       }}
                       type="button"
                     >
@@ -1622,6 +1696,7 @@ export function App() {
 
             <div className="stats-grid">
               <span><MapPin /> {detail.stops.length} stops</span>
+              {tripTiming ? <span><CalendarDays /> {tripTiming}</span> : null}
               <span><Image /> {mediaCount} media</span>
               <span><Route /> {mainRouteKm ? formatDistance(mainRouteKm) : "0 m"} route</span>
               <span>

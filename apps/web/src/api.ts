@@ -45,6 +45,8 @@ export const api = {
     description: string;
     type: Trip["type"];
     folderId?: string | null;
+    startsAt?: string | null;
+    endsAt?: string | null;
   }) =>
     request<{ trip: Trip }>("/trips", {
       method: "POST",
@@ -56,6 +58,8 @@ export const api = {
       title?: string;
       description?: string;
       folderId?: string | null;
+      startsAt?: string | null;
+      endsAt?: string | null;
     }
   ) =>
     request<{ trip: Trip }>(`/trips/${id}`, {
