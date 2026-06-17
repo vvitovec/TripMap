@@ -97,6 +97,7 @@ export function App() {
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [manualLabel, setManualLabel] = useState("");
+  const [routeQueue, setRouteQueue] = useState<PlaceSearchResult[]>([]);
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<"all" | "unfiled" | string>("all");
@@ -271,6 +272,7 @@ export function App() {
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
   }, [placeResults, searchAnchor]);
+  const queuedPlaceIds = useMemo(() => new Set(routeQueue.map((place) => place.id)), [routeQueue]);
   const routeInsertionAnchor = useMemo(() => {
     if (!activeStop) return null;
     if (!activeStop.branch_of) return activeStop;
@@ -459,6 +461,7 @@ export function App() {
   function selectTripId(id: string) {
     setSelectedTripId(id);
     setPlaceQuery("");
+    setRouteQueue([]);
     resetDestinationDraft();
   }
 
@@ -483,6 +486,7 @@ export function App() {
       setShowCreateTrip(false);
       resetDestinationDraft();
       setPlaceQuery("");
+      setRouteQueue([]);
       if (newTripFolderId) setSelectedFolderId(newTripFolderId);
       await load();
     } catch (error) {
@@ -541,14 +545,29 @@ export function App() {
     });
   }
 
-  async function makeRoomForSortOrder(sortOrder: number) {
+  function destinationInsertionPlan() {
+    const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
+    let sortOrder = maxSortOrder + 1;
+    const branchParent = destinationScope === "branch" ? activeStop : null;
+    if (destinationScope === "main" && routeInsertionAnchor) {
+      sortOrder = routeInsertionAnchor.sort_order + 1;
+    }
+    if (destinationScope === "branch" && branchParent) {
+      const siblings = sideTripsByParent.get(branchParent.id) ?? [];
+      const lastRelatedStop = [branchParent, ...siblings].sort((a, b) => b.sort_order - a.sort_order)[0];
+      sortOrder = (lastRelatedStop?.sort_order ?? branchParent.sort_order) + 1;
+    }
+    return { sortOrder, branchParent };
+  }
+
+  async function makeRoomForSortOrder(sortOrder: number, amount = 1) {
     if (!selectedTripId) return;
     const stopsToShift = orderedStops
       .filter((stop) => stop.sort_order >= sortOrder)
       .sort((a, b) => b.sort_order - a.sort_order);
     await Promise.all(
       stopsToShift.map((stop) =>
-        api.updateStop(selectedTripId, stop.id, { sortOrder: stop.sort_order + 1 })
+        api.updateStop(selectedTripId, stop.id, { sortOrder: stop.sort_order + amount })
       )
     );
   }
@@ -581,17 +600,7 @@ export function App() {
     if (!selectedTripId) return;
     setBusy(true);
     setError(null);
-    const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
-    let sortOrder = maxSortOrder + 1;
-    const branchParent = destinationScope === "branch" ? activeStop : null;
-    if (destinationScope === "main" && routeInsertionAnchor) {
-      sortOrder = routeInsertionAnchor.sort_order + 1;
-    }
-    if (destinationScope === "branch" && branchParent) {
-      const siblings = sideTripsByParent.get(branchParent.id) ?? [];
-      const lastRelatedStop = [branchParent, ...siblings].sort((a, b) => b.sort_order - a.sort_order)[0];
-      sortOrder = (lastRelatedStop?.sort_order ?? branchParent.sort_order) + 1;
-    }
+    const { sortOrder, branchParent } = destinationInsertionPlan();
     try {
       await makeRoomForSortOrder(sortOrder);
       const { stop } = await api.addStop(selectedTripId, {
@@ -616,6 +625,46 @@ export function App() {
   async function addStopFromDraft() {
     if (!placeDraft) return;
     await addPlaceToRoute(placeDraft, draftTitle, draftNote);
+  }
+
+  function queuePlace(place: PlaceSearchResult) {
+    setRouteQueue((items) => (items.some((item) => item.id === place.id) ? items : [...items, place]));
+  }
+
+  function removeQueuedPlace(placeId: string) {
+    setRouteQueue((items) => items.filter((item) => item.id !== placeId));
+  }
+
+  async function addQueuedPlaces() {
+    if (!selectedTripId || !routeQueue.length) return;
+    setBusy(true);
+    setError(null);
+    const { sortOrder, branchParent } = destinationInsertionPlan();
+    try {
+      await makeRoomForSortOrder(sortOrder, routeQueue.length);
+      const created: Stop[] = [];
+      for (const [index, place] of routeQueue.entries()) {
+        const { stop } = await api.addStop(selectedTripId, {
+          title: place.name || `Stop ${sortOrder + index + 1}`,
+          note: "",
+          lat: place.lat,
+          lng: place.lng,
+          sortOrder: sortOrder + index,
+          branchOf: branchParent ? branchParent.id : null
+        });
+        created.push(stop);
+      }
+      setDetail(await api.trip(selectedTripId));
+      const lastCreated = created[created.length - 1];
+      if (lastCreated) selectStopId(lastCreated.id);
+      setRouteQueue([]);
+      resetDestinationDraft();
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function createStopFromMedia(item: MediaItem) {
@@ -1409,11 +1458,55 @@ export function App() {
                       >
                         <Plus size={14} /> Add
                       </button>
+                      <button
+                        className={queuedPlaceIds.has(place.id) ? "place-result-queue active" : "place-result-queue"}
+                        onClick={() => queuePlace(place)}
+                        disabled={busy || queuedPlaceIds.has(place.id)}
+                        type="button"
+                      >
+                        {queuedPlaceIds.has(place.id) ? <Check size={14} /> : <ListFilter size={14} />}
+                        {queuedPlaceIds.has(place.id) ? "Queued" : "Queue"}
+                      </button>
                     </article>
                   ))}
                 </div>
               ) : destinationMode !== "coordinates" && placeQuery.trim().length >= 3 && !searchingPlaces ? (
                 <p className="muted">No places found.</p>
+              ) : null}
+
+              {routeQueue.length ? (
+                <div className="route-queue">
+                  <div className="panel-heading compact-heading">
+                    <div>
+                      <p className="eyebrow">Route queue</p>
+                      <h3>{routeQueue.length} destination{routeQueue.length === 1 ? "" : "s"} ready</h3>
+                      <small className="anchor-label">{destinationPlacementLabel()}</small>
+                    </div>
+                    <ListFilter size={17} />
+                  </div>
+                  <div className="route-queue-list">
+                    {routeQueue.map((place, index) => (
+                      <article key={place.id}>
+                        <span>{index + 1}</span>
+                        <div>
+                          <strong>{place.name}</strong>
+                          <small>{placeDistanceLabel(place) ?? place.category}</small>
+                        </div>
+                        <button onClick={() => removeQueuedPlace(place.id)} type="button" title="Remove from queue">
+                          <X size={14} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="route-queue-actions">
+                    <button className="wide-button" onClick={addQueuedPlaces} disabled={busy}>
+                      <Plus size={16} /> Add all to route
+                    </button>
+                    <button className="wide-button subtle" onClick={() => setRouteQueue([])} disabled={busy} type="button">
+                      <X size={16} /> Clear queue
+                    </button>
+                  </div>
+                </div>
               ) : null}
 
               {placeDraft ? (
