@@ -725,13 +725,23 @@ export function App() {
     await addPlaceToRoute(placeDraft, draftTitle, draftNote);
   }
 
-  function queuePlace(place: PlaceSearchResult) {
+  function queuePlace(place: PlaceSearchResult, title = place.name, note = "") {
     setRouteQueue((items) =>
       items.some((item) => item.place.id === place.id)
-        ? items
-        : [...items, { place, title: place.name, note: "" }]
+        ? items.map((item) =>
+            item.place.id === place.id
+              ? { ...item, title: title.trim() || place.name, note }
+              : item
+          )
+        : [...items, { place, title: title.trim() || place.name, note }]
     );
     setSearchOrigin("route");
+  }
+
+  function queueDraftPlace() {
+    if (!placeDraft) return;
+    queuePlace(placeDraft, draftTitle, draftNote);
+    resetDestinationDraft();
   }
 
   function removeQueuedPlace(placeId: string) {
@@ -1817,6 +1827,9 @@ export function App() {
                   <div className="draft-actions">
                     <button className="wide-button" onClick={addStopFromDraft} disabled={busy}>
                       <Check size={16} /> {destinationScope === "branch" ? "Add side trip" : "Add stop"}
+                    </button>
+                    <button className="wide-button subtle" onClick={queueDraftPlace} disabled={busy} type="button">
+                      <ListFilter size={16} /> Queue
                     </button>
                     <button
                       className="icon-button"

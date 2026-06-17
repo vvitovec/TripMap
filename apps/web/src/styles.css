@@ -852,7 +852,7 @@ textarea {
 
 .draft-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 42px;
   gap: 8px;
 }
 
@@ -1418,6 +1418,14 @@ textarea {
 
   .route-queue-list article {
     grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .draft-actions {
+    grid-template-columns: minmax(0, 1fr) 42px;
+  }
+
+  .draft-actions .wide-button:first-child {
+    grid-column: 1 / -1;
   }
 
   .queue-row-actions {
