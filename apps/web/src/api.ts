@@ -137,5 +137,10 @@ export const api = {
     if (stopId) form.append("stopId", stopId);
     for (const file of Array.from(files)) form.append("file", file);
     return request("/media/upload", { method: "POST", body: form });
-  }
+  },
+  updateMedia: (mediaId: string, stopId: string | null) =>
+    request(`/media/${mediaId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ stopId })
+    })
 };

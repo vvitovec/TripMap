@@ -296,6 +296,18 @@ export function App() {
     }
     return detail.notes;
   }, [activeMemoryScope, activeStop, detail]);
+  const locatedUnassignedMedia = useMemo(
+    () =>
+      (detail?.media ?? []).filter(
+        (item) =>
+          !item.stop_id &&
+          typeof item.latitude === "number" &&
+          Number.isFinite(item.latitude) &&
+          typeof item.longitude === "number" &&
+          Number.isFinite(item.longitude)
+      ),
+    [detail?.media]
+  );
   const memoryTitle = activeMemoryScope === "active" && activeStop ? activeStop.title : detail?.trip.title ?? "Trip";
   const presentationGroups = useMemo(() => {
     if (!detail) return [];
@@ -601,6 +613,34 @@ export function App() {
     }
   }
 
+  async function createStopFromMedia(item: MediaItem) {
+    if (!selectedTripId || typeof item.latitude !== "number" || typeof item.longitude !== "number") return;
+    setBusy(true);
+    setError(null);
+    const maxSortOrder = orderedStops.reduce((max, stop) => Math.max(max, stop.sort_order), -1);
+    const title = item.captured_at
+      ? `Photo from ${new Date(item.captured_at).toLocaleDateString()}`
+      : item.file_name.replace(/\.[^.]+$/, "") || `Stop ${maxSortOrder + 2}`;
+    try {
+      const { stop } = await api.addStop(selectedTripId, {
+        title,
+        note: "Created from media location metadata.",
+        lat: item.latitude,
+        lng: item.longitude,
+        sortOrder: maxSortOrder + 1
+      });
+      await api.updateMedia(item.id, stop.id);
+      setDetail(await api.trip(selectedTripId));
+      selectStopId(stop.id);
+      setMemoryScope("active");
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function upload(files: FileList | null) {
     if (!files || !selectedTripId) return;
     setBusy(true);
@@ -796,6 +836,15 @@ export function App() {
     if (destinationScope === "branch" && activeStop) return `Side trip from ${activeStop.title}`;
     if (destinationScope === "main" && routeInsertionAnchor) return `Main route after ${routeInsertionAnchor.title}`;
     return "Main route at the end";
+  }
+
+  function mediaLocationLabel(item: MediaItem) {
+    const coordinates =
+      typeof item.latitude === "number" && typeof item.longitude === "number"
+        ? `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}`
+        : "Location found";
+    const date = item.captured_at ? new Date(item.captured_at).toLocaleDateString() : null;
+    return date ? `${coordinates} · ${date}` : coordinates;
   }
 
   function renderStopCard(stop: Stop, variant: "main" | "branch" = "main") {
@@ -1445,6 +1494,35 @@ export function App() {
                 </span>
                 <input type="file" accept="image/*,video/*" multiple onChange={(event) => upload(event.target.files)} />
               </label>
+              {activeMemoryScope === "all" && locatedUnassignedMedia.length ? (
+                <div className="located-media-panel">
+                  <div className="panel-heading compact-heading">
+                    <div>
+                      <p className="eyebrow">Found in metadata</p>
+                      <h3>Make destinations from media</h3>
+                    </div>
+                    <MapPin size={17} />
+                  </div>
+                  <div className="located-media-list">
+                    {locatedUnassignedMedia.map((item) => (
+                      <article key={item.id}>
+                        {item.kind === "video" ? (
+                          <video src={mediaThumbUrl(item) ?? mediaUrl(item)} />
+                        ) : (
+                          <img src={mediaThumbUrl(item)} alt={item.file_name} />
+                        )}
+                        <div>
+                          <strong>{item.file_name}</strong>
+                          <small>{mediaLocationLabel(item)}</small>
+                        </div>
+                        <button onClick={() => createStopFromMedia(item)} disabled={busy} type="button">
+                          <Plus size={14} /> Create stop
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <textarea
                 value={noteDraft}
                 onChange={(event) => setNoteDraft(event.target.value)}

@@ -427,6 +427,10 @@ textarea {
   font-size: 18px;
 }
 
+.compact-heading h3 {
+  font-size: 15px;
+}
+
 .anchor-label {
   display: block;
   color: #667085;
@@ -670,6 +674,72 @@ textarea {
 
 .upload-box input {
   display: none;
+}
+
+.located-media-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #bbebc8;
+  border-radius: 8px;
+  background: #f4fbf6;
+  padding: 10px;
+}
+
+.located-media-list {
+  display: grid;
+  gap: 8px;
+}
+
+.located-media-list article {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #fff;
+  padding: 7px;
+}
+
+.located-media-list img,
+.located-media-list video {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 7px;
+  background: #dde4df;
+}
+
+.located-media-list strong,
+.located-media-list small {
+  display: block;
+}
+
+.located-media-list strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.located-media-list small {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.located-media-list button {
+  min-height: 34px;
+  border: 1px solid #d6dde5;
+  border-radius: 8px;
+  background: #f8faf8;
+  color: #276749;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  white-space: nowrap;
 }
 
 .memory-panel,
@@ -1118,5 +1188,14 @@ textarea {
 
   .route-empty-actions {
     grid-template-columns: 1fr;
+  }
+
+  .located-media-list article {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .located-media-list button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }

@@ -77,6 +77,10 @@ const stopSchema = z.object({
 
 const stopUpdateSchema = stopSchema.partial();
 
+const mediaUpdateSchema = z.object({
+  stopId: z.string().uuid().nullable()
+});
+
 const placeSearchSchema = z.object({
   q: z.string().trim().min(3).max(180),
   lat: z.coerce.number().min(-90).max(90).optional(),
@@ -811,6 +815,41 @@ export async function registerRoutes(app: FastifyInstance) {
     reply.type(contentType);
     reply.header("Cache-Control", "private, max-age=604800");
     return reply.send(object.Body);
+  });
+
+  app.patch("/media/:id", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = mediaUpdateSchema.parse(request.body);
+    const { rows } = await pool.query(
+      "SELECT id, trip_id FROM media_items WHERE id = $1",
+      [id]
+    );
+    const media = rows[0];
+    if (!media) {
+      reply.code(404).send({ error: "Media not found" });
+      return;
+    }
+    if (!(await canEditTrip(media.trip_id, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    if (input.stopId) {
+      const { rowCount } = await pool.query(
+        "SELECT 1 FROM stops WHERE id = $1 AND trip_id = $2",
+        [input.stopId, media.trip_id]
+      );
+      if (!rowCount) {
+        reply.code(400).send({ error: "Stop is not part of this trip" });
+        return;
+      }
+    }
+    const updated = await pool.query(
+      "UPDATE media_items SET stop_id = $1 WHERE id = $2 RETURNING *",
+      [input.stopId, id]
+    );
+    return { media: updated.rows[0] };
   });
 
   app.post("/media/upload", async (request, reply) => {
