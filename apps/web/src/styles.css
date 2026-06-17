@@ -679,7 +679,7 @@ textarea {
 }
 
 .destination-plan-actions {
-  grid-template-columns: minmax(0, 1fr) 92px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 82px;
 }
 
 .destination-plan-actions button:disabled {

@@ -260,6 +260,7 @@ export function App() {
   const [searchOrigin, setSearchOrigin] = useState<SearchOrigin>("context");
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [activePresetStep, setActivePresetStep] = useState(0);
+  const [planningPresetId, setPlanningPresetId] = useState<string | null>(null);
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<"all" | "unfiled" | string>("all");
@@ -510,6 +511,7 @@ export function App() {
   const activePresetQuery = activePreset?.steps[activePresetStep]?.query ?? null;
   const canAdvancePreset = Boolean(activePreset && activePresetStep < activePreset.steps.length - 1);
   const canQueueTopForPreset = Boolean(topVisiblePlace && !queuedPlaceIds.has(topVisiblePlace.id) && !topVisibleSavedStop);
+  const planningActivePreset = Boolean(activePreset && planningPresetId === activePreset.id);
   const mapPreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     routeQueue.forEach((item) => previews.set(item.place.id, item.place));
@@ -708,6 +710,7 @@ export function App() {
     setManualLabel("");
     setActivePresetId(null);
     setActivePresetStep(0);
+    setPlanningPresetId(null);
   }
 
   function scrollToDestinationPanel() {
@@ -827,6 +830,7 @@ export function App() {
     setPlaceDraft(null);
     setActivePresetId(null);
     setActivePresetStep(0);
+    setPlanningPresetId(null);
   }
 
   function searchAroundDraft(query: string) {
@@ -836,6 +840,7 @@ export function App() {
     setPlaceQuery(query);
     setActivePresetId(null);
     setActivePresetStep(0);
+    setPlanningPresetId(null);
     setError(null);
   }
 
@@ -857,6 +862,59 @@ export function App() {
     setPlaceDraft(null);
     setPlaceQuery(step.query);
     setError(null);
+  }
+
+  async function buildActivePresetQueue() {
+    if (!activePreset || !selectedTripId) return;
+    setPlanningPresetId(activePreset.id);
+    setDestinationMode("nearby");
+    setError(null);
+
+    const additions: QueuedPlace[] = [];
+    const seenPlaceIds = new Set(routeQueue.map((item) => item.place.id));
+    let cursor: { lat: number; lng: number } | undefined = queueAnchor ?? searchAnchor ?? undefined;
+    let lastPlaces: PlaceSearchResult[] = [];
+    let lastStepIndex = activePresetStep;
+    let lastQuery = activePreset.steps[activePresetStep]?.query ?? activePreset.steps[0]?.query ?? "";
+
+    try {
+      for (const [index, step] of activePreset.steps.entries()) {
+        const { places } = await api.searchPlaces(step.query, cursor);
+        lastPlaces = places;
+        lastStepIndex = index;
+        lastQuery = step.query;
+        const nextPlace = places.find(
+          (place) =>
+            !seenPlaceIds.has(place.id) &&
+            !savedStopForPlace(place) &&
+            !additions.some((item) => distanceKm(item.place, place) <= 0.05)
+        );
+        if (!nextPlace) continue;
+        additions.push({ place: nextPlace, title: nextPlace.name, note: "", arrivedAt: "", departedAt: "" });
+        seenPlaceIds.add(nextPlace.id);
+        cursor = nextPlace;
+      }
+
+      setPlaceQuery(lastQuery);
+      setPlaceResults(lastPlaces);
+      setPlaceResultFilter("all");
+      setActivePresetStep(lastStepIndex);
+
+      if (!additions.length) {
+        setError("No new places found for this plan near the current search area.");
+        return;
+      }
+
+      setRouteQueue((items) => {
+        const existingIds = new Set(items.map((item) => item.place.id));
+        return [...items, ...additions.filter((item) => !existingIds.has(item.place.id))];
+      });
+      setSearchOrigin("route");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPlanningPresetId(null);
+    }
   }
 
   function queueTopAndAdvancePreset() {
@@ -2075,6 +2133,7 @@ export function App() {
                           setPlaceResultFilter("all");
                           setActivePresetId(null);
                           setActivePresetStep(0);
+                          setPlanningPresetId(null);
                         }}
                         type="button"
                         title="Clear search"
@@ -2116,8 +2175,16 @@ export function App() {
                       </div>
                       <div className="destination-plan-actions">
                         <button
+                          onClick={buildActivePresetQueue}
+                          disabled={busy || planningActivePreset}
+                          type="button"
+                        >
+                          {planningActivePreset ? <Loader2 className="spin" size={13} /> : <Route size={13} />}
+                          {planningActivePreset ? "Building" : "Build plan"}
+                        </button>
+                        <button
                           onClick={queueTopAndAdvancePreset}
-                          disabled={busy || !topVisiblePlace || !canQueueTopForPreset}
+                          disabled={busy || planningActivePreset || !topVisiblePlace || !canQueueTopForPreset}
                           type="button"
                         >
                           <ListFilter size={13} />
@@ -2125,7 +2192,7 @@ export function App() {
                         </button>
                         <button
                           onClick={() => goToPresetStep(activePresetStep + 1)}
-                          disabled={busy || !canAdvancePreset}
+                          disabled={busy || planningActivePreset || !canAdvancePreset}
                           type="button"
                         >
                           <ChevronDown size={13} /> Next
