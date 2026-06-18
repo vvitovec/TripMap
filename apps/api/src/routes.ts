@@ -403,6 +403,55 @@ function cleanedMapLinkText(value: string) {
     .trim();
 }
 
+function isAllowedMapLinkHost(hostname: string) {
+  const host = hostname.toLowerCase();
+  return (
+    host === "maps.app.goo.gl" ||
+    host === "goo.gl" ||
+    host === "maps.google.com" ||
+    host === "www.google.com" ||
+    host === "google.com" ||
+    host.endsWith(".google.com") ||
+    host === "maps.apple.com"
+  );
+}
+
+function parseHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveKnownMapLink(query: string) {
+  const original = query.trim();
+  let url = parseHttpUrl(original);
+  if (!url || !isAllowedMapLinkHost(url.hostname)) return original;
+
+  for (let redirectCount = 0; redirectCount < 4; redirectCount += 1) {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      redirect: "manual",
+      headers: {
+        "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
+        Referer: "https://trip.vvitovec.com"
+      },
+      signal: AbortSignal.timeout(3500)
+    }).catch(() => null);
+    if (!response) return url.toString();
+    const location = response.headers.get("location");
+    if (!location || response.status < 300 || response.status >= 400) return url.toString();
+    const next = parseHttpUrl(new URL(location, url).toString());
+    if (!next || !isAllowedMapLinkHost(next.hostname)) return url.toString();
+    url = next;
+  }
+
+  return url.toString();
+}
+
 function mapLinkSearchText(query: string) {
   const trimmed = query.trim();
   if (!/^https?:\/\//i.test(trimmed)) return null;
@@ -584,7 +633,8 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   const cached = placeSearchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.places;
 
-  const coordinates = parseCoordinateQuery(input.q);
+  const resolvedQuery = await resolveKnownMapLink(input.q);
+  const coordinates = parseCoordinateQuery(resolvedQuery);
   if (coordinates) {
     const place = await reversePlace(coordinates);
     const places = [place];
@@ -595,8 +645,8 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     return places;
   }
 
-  const linkSearchText = mapLinkSearchText(input.q);
-  const queryText = linkSearchText ?? input.q.trim();
+  const linkSearchText = mapLinkSearchText(resolvedQuery);
+  const queryText = linkSearchText ?? resolvedQuery.trim();
   const categoryIntent = nearbyCategoryIntent(queryText);
   const normalizedQuery = categoryIntent ?? queryText;
   const hasAnchor = input.lat !== undefined && input.lng !== undefined;
