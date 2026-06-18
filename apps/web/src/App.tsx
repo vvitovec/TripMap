@@ -43,6 +43,7 @@ type DestinationPreset = {
   steps: Array<{ label: string; query: string }>;
 };
 type PlaceChip = { label: string; query: string; hint: string };
+type DestinationSearchSuggestion = { label: string; query: string; hint: string; mode: DestinationMode };
 type DestinationListItem = { query: string; note: string };
 type QueuedPlace = {
   place: PlaceSearchResult;
@@ -475,6 +476,7 @@ export function App() {
     : null;
   const destinationPanelRef = useRef<HTMLElement | null>(null);
   const destinationDraftRef = useRef<HTMLDivElement | null>(null);
+  const placeSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -705,6 +707,14 @@ export function App() {
       : searchOrigin === "map" && mapFocus
         ? "map center"
         : contextSearchAnchorLabel;
+  const namedSearchAnchor =
+    searchOrigin === "draft" && placeDraft
+      ? placeDraft.name
+      : searchOrigin === "route" && routeSearchAnchor
+      ? routeSearchAnchor.name
+      : searchOrigin === "context" && activeStop
+        ? activeStop.title
+        : "";
   const contextSearchOriginTitle = activeStop ? "Selected stop" : detail?.stops.length ? "Trip area" : "Default area";
   const draftSearchOriginLabel = placeDraft?.name ?? "Select a result first";
   const routeSearchOriginLabel = routeSearchAnchor?.name ?? "Queue a stop first";
@@ -809,6 +819,31 @@ export function App() {
           : ["hotel", "resort", "landmark", "restaurant", "viewpoint", "park"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, mainStops.length, routeQueue.length]);
+  const destinationSearchSuggestions = useMemo<DestinationSearchSuggestion[]>(() => {
+    const anchor = namedSearchAnchor.trim();
+    const hint = anchor ? `Near ${anchor}` : `Around ${searchAnchorLabel}`;
+    const mode: DestinationMode = anchor ? "search" : "nearby";
+    const query = (category: string) => (anchor ? `${category} near ${anchor}` : category);
+    const seeds =
+      currentTrip?.type === "road_trip"
+        ? [
+            { label: "Fuel next", category: "fuel" },
+            { label: "Rest stop", category: "rest area" },
+            { label: "Food nearby", category: "restaurant" }
+          ]
+        : [
+            { label: "Stay nearby", category: "hotel" },
+            { label: "Landmarks", category: "landmark" },
+            { label: "Food nearby", category: "restaurant" }
+          ];
+
+    return seeds.map((seed) => ({
+      label: seed.label,
+      query: query(seed.category),
+      hint,
+      mode
+    }));
+  }, [currentTrip?.type, namedSearchAnchor, searchAnchorLabel]);
   const draftExploreChips = useMemo(() => {
     const queries =
       currentTrip?.type === "road_trip"
@@ -1235,6 +1270,17 @@ export function App() {
     setActivePresetId(null);
     setActivePresetStep(0);
     setPlanningPresetId(null);
+  }
+
+  function applyDestinationSearchSuggestion(suggestion: DestinationSearchSuggestion) {
+    setDestinationMode(suggestion.mode);
+    setPlaceQuery(suggestion.query);
+    setPlaceDraft(null);
+    setActivePresetId(null);
+    setActivePresetStep(0);
+    setPlanningPresetId(null);
+    setError(null);
+    window.setTimeout(() => placeSearchInputRef.current?.focus(), 0);
   }
 
   function searchAroundDraft(query: string) {
@@ -2759,6 +2805,7 @@ export function App() {
                   <div className="search-input">
                     <Search size={17} />
                     <input
+                      ref={placeSearchInputRef}
                       value={placeQuery}
                       onChange={(event) => {
                         setActivePresetId(null);
@@ -2786,6 +2833,22 @@ export function App() {
                         <X size={15} />
                       </button>
                     ) : null}
+                  </div>
+                  <div className="search-suggestions">
+                    <small>Fast search</small>
+                    <div className="search-suggestion-list">
+                      {destinationSearchSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.label}
+                          className={placeQuery === suggestion.query ? "active" : ""}
+                          onClick={() => applyDestinationSearchSuggestion(suggestion)}
+                          type="button"
+                        >
+                          <span>{suggestion.label}</span>
+                          <small>{suggestion.hint}</small>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="destination-presets">
                     {destinationPresets.map((preset) => (
