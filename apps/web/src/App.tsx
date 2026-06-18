@@ -4636,43 +4636,7 @@ export function App() {
                     </section>
                   );
                 })
-              ) : (
-                <section className="route-empty-state">
-                  <MapPin size={20} />
-                  <div>
-                    <strong>Start the route with a destination</strong>
-                    <small>Search an address or place, browse nearby ideas, or drop an exact pin on the satellite map.</small>
-                  </div>
-                  <div className="route-empty-actions">
-                    <button onClick={() => openDestinationMode("search")} type="button">
-                      <Search size={14} /> Search
-                    </button>
-                    <button onClick={() => openDestinationMode("nearby")} type="button">
-                      <Compass size={14} /> Nearby
-                    </button>
-                    <button onClick={() => openDestinationMode("coordinates")} type="button">
-                      <Crosshair size={14} /> Pin
-                    </button>
-                  </div>
-                  <div className="route-empty-plans">
-                    <span>Starter plans</span>
-                    <div>
-                      {routeStarterPresets.map((preset) => (
-                        <button
-                          key={preset.id}
-                          onClick={() => buildPresetQueue(preset)}
-                          disabled={busy || planningPresetId === preset.id}
-                          type="button"
-                        >
-                          {planningPresetId === preset.id ? <Loader2 className="spin" size={13} /> : <Route size={13} />}
-                          <strong>{preset.title}</strong>
-                          <small>{preset.hint}</small>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              )}
+              ) : null}
               {orphanBranchStops.length ? (
                 <section className="route-stop-group">
                   <div className="route-step-label">
