@@ -276,6 +276,29 @@ function placeSourceLabel(place: PlaceSearchResult) {
   return null;
 }
 
+function defaultPlaceNote(place: PlaceSearchResult, query = "") {
+  const text = [place.category, place.type, place.name, query].join(" ").toLowerCase().replace(/[_-]+/g, " ");
+  if (/\b(hotel|resort|hostel|motel|guest house|guesthouse|apartment|chalet|cabin|camp site|camping|lodging|stay)\b/.test(text)) {
+    return "Stay";
+  }
+  if (/\b(restaurant|food|dinner|lunch|breakfast)\b/.test(text)) return "Meal";
+  if (/\b(cafe|coffee)\b/.test(text)) return "Coffee";
+  if (/\b(bar|pub)\b/.test(text)) return "Drinks";
+  if (/\b(fuel|gas)\b/.test(text)) return "Fuel stop";
+  if (/\b(charging station|charger|ev charging)\b/.test(text)) return "Charge";
+  if (/\b(rest area|rest stop)\b/.test(text)) return "Rest stop";
+  if (/\b(parking)\b/.test(text)) return "Parking";
+  if (/\b(airport|station|bus stop|metro|ferry|transit|rail)\b/.test(text)) return "Transit";
+  if (/\b(grocery|marketplace|supplies)\b/.test(text)) return "Supplies";
+  if (/\b(pharmacy|hospital|clinic|doctors)\b/.test(text)) return "Health stop";
+  if (/\b(atm|cash)\b/.test(text)) return "Cash";
+  if (/\b(viewpoint|photo)\b/.test(text)) return "Photo stop";
+  if (/\b(landmark|tourist attraction|attraction|museum|park|beach|monument|castle|trail|waterfall|historic|ruins|zoo|aquarium|theme park)\b/.test(text)) {
+    return "Visit";
+  }
+  return "";
+}
+
 function normalizedPlaceName(value: string) {
   return value.toLowerCase().replace(/\W+/g, "");
 }
@@ -1220,7 +1243,7 @@ export function App() {
     rememberRecentPlace(place);
     setPlaceDraft(place);
     setDraftTitle(place.name);
-    setDraftNote("");
+    setDraftNote(defaultPlaceNote(place, placeQuery));
     setManualLat(String(Number(place.lat.toFixed(6))));
     setManualLng(String(Number(place.lng.toFixed(6))));
     setManualLabel(place.name);
@@ -1357,7 +1380,13 @@ export function App() {
             !additions.some((item) => distanceKm(item.place, place) <= 0.05)
         );
         if (!nextPlace) continue;
-        additions.push({ place: nextPlace, title: nextPlace.name, note: "", arrivedAt: "", departedAt: "" });
+        additions.push({
+          place: nextPlace,
+          title: nextPlace.name,
+          note: defaultPlaceNote(nextPlace, step.query),
+          arrivedAt: "",
+          departedAt: ""
+        });
         seenPlaceIds.add(nextPlace.id);
         cursor = nextPlace;
       }
@@ -1426,7 +1455,13 @@ export function App() {
           continue;
         }
 
-        additions.push({ place: nextPlace, title: nextPlace.name, note: item.note, arrivedAt: "", departedAt: "" });
+        additions.push({
+          place: nextPlace,
+          title: nextPlace.name,
+          note: item.note || defaultPlaceNote(nextPlace, query),
+          arrivedAt: "",
+          departedAt: ""
+        });
         seenPlaceIds.add(nextPlace.id);
         cursor = nextPlace;
       }
@@ -1581,7 +1616,8 @@ export function App() {
     title: string,
     note: string,
     arrivedAt = "",
-    departedAt = ""
+    departedAt = "",
+    options: { inferNote?: boolean } = {}
   ) {
     if (!selectedTripId) return;
     const savedStop = savedStopForPlace(place);
@@ -1604,7 +1640,7 @@ export function App() {
       await makeRoomForSortOrder(sortOrder);
       const { stop } = await api.addStop(selectedTripId, {
         title: title.trim() || place.name || `Stop ${sortOrder + 1}`,
-        note: note.trim(),
+        note: note.trim() || (options.inferNote === false ? "" : defaultPlaceNote(place, placeQuery)),
         lat: place.lat,
         lng: place.lng,
         sortOrder,
@@ -1625,24 +1661,25 @@ export function App() {
 
   async function addStopFromDraft() {
     if (!placeDraft) return;
-    await addPlaceToRoute(placeDraft, draftTitle, draftNote, draftArrivedAt, draftDepartedAt);
+    await addPlaceToRoute(placeDraft, draftTitle, draftNote, draftArrivedAt, draftDepartedAt, { inferNote: false });
   }
 
-  function queuePlace(place: PlaceSearchResult, title = place.name, note = "", arrivedAt = "", departedAt = "") {
+  function queuePlace(place: PlaceSearchResult, title = place.name, note = "", arrivedAt = "", departedAt = "", inferNote = true) {
     const savedStop = savedStopForPlace(place);
     if (savedStop) {
       selectStopId(savedStop.id);
       setError(null);
       return;
     }
+    const queuedNote = note.trim() || (inferNote ? defaultPlaceNote(place, placeQuery) : "");
     setRouteQueue((items) =>
       items.some((item) => item.place.id === place.id)
         ? items.map((item) =>
             item.place.id === place.id
-              ? { ...item, title: title.trim() || place.name, note, arrivedAt, departedAt }
+              ? { ...item, title: title.trim() || place.name, note: queuedNote, arrivedAt, departedAt }
               : item
           )
-        : [...items, { place, title: title.trim() || place.name, note, arrivedAt, departedAt }]
+        : [...items, { place, title: title.trim() || place.name, note: queuedNote, arrivedAt, departedAt }]
     );
     rememberRecentPlace(place);
     setSearchOrigin("route");
@@ -1693,7 +1730,7 @@ export function App() {
       setError(draftTimeError);
       return;
     }
-    queuePlace(placeDraft, draftTitle, draftNote, draftArrivedAt, draftDepartedAt);
+    queuePlace(placeDraft, draftTitle, draftNote, draftArrivedAt, draftDepartedAt, false);
     resetDestinationDraft();
   }
 
