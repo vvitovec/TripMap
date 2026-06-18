@@ -1200,6 +1200,9 @@ export function App() {
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
   }, [destinationSearchIntent?.kind, placeResults, searchAnchor]);
+  const hasActivePlaceSearch =
+    destinationMode !== "coordinates" &&
+    (placeQuery.trim().length > 0 || searchingPlaces || placeSearchError || rankedPlaceResults.length > 0);
   const placeResultOrderLabel =
     destinationSearchIntent?.kind === "nearby"
       ? `Nearest first for ${destinationSearchIntent.title}`
@@ -3865,7 +3868,7 @@ export function App() {
                 </div>
               )}
 
-              {destinationMode !== "coordinates" && recentDestinationPlaces.length ? (
+              {destinationMode !== "coordinates" && !hasActivePlaceSearch && recentDestinationPlaces.length ? (
                 <div className="recent-destinations">
                   <div className="recent-destinations-heading">
                     <span>Recent & saved</span>
