@@ -891,7 +891,7 @@ function overpassQuery(filters: OverpassTagFilter[], lat: number, lng: number, r
       ];
     })
     .join("");
-  return `[out:json][timeout:6];(${clauses});out center tags 24;`;
+  return `[out:json][timeout:10];(${clauses});out center tags 24;`;
 }
 
 function overpassAddress(tags: Record<string, string>) {
@@ -965,7 +965,7 @@ async function searchOverpassPlaces(query: string, lat: number, lng: number) {
       Referer: "https://trip.vvitovec.com"
     },
     body: new URLSearchParams({ data: overpassQuery(filters, lat, lng, radiusMeters) }),
-    signal: AbortSignal.timeout(8000)
+    signal: AbortSignal.timeout(14_000)
   });
   if (!response.ok) {
     throw new Error(`Overpass search failed with status ${response.status}`);
@@ -1115,8 +1115,8 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   const [nominatimPlaces, overpassPlaces] =
     searchAnchor && isNearbyCategory
       ? await Promise.all([
-          withSoftTimeout(searchNominatimPlaces(), 6500, [] as SearchPlace[]),
-          withSoftTimeout(searchOverpassPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng), 9000, [])
+          withSoftTimeout(searchNominatimPlaces(), 11_000, [] as SearchPlace[]),
+          withSoftTimeout(searchOverpassPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng), 15_000, [])
         ])
       : [await searchNominatimPlaces(), []];
   const mergedPlaces = mergePlaces(nominatimPlaces, overpassPlaces);
