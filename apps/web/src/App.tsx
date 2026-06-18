@@ -1187,9 +1187,14 @@ export function App() {
     return pickPlaceChips(queries);
   }, [currentTrip?.type]);
   const rankedPlaceResults = useMemo(() => {
+    if (destinationSearchIntent?.kind === "nearby") return placeResults;
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
-  }, [placeResults, searchAnchor]);
+  }, [destinationSearchIntent?.kind, placeResults, searchAnchor]);
+  const placeResultOrderLabel =
+    destinationSearchIntent?.kind === "nearby"
+      ? `Nearest first for ${destinationSearchIntent.title}`
+      : `Nearest first near ${searchAnchorLabel}`;
   const placeResultFilters = useMemo(() => {
     const counts = new Map<string, number>();
     rankedPlaceResults.forEach((place) => {
@@ -3886,7 +3891,7 @@ export function App() {
                         {visiblePlaceResults.length} of {rankedPlaceResults.length} result{rankedPlaceResults.length === 1 ? "" : "s"}
                       </strong>
                       <small>
-                        Nearest first near {searchAnchorLabel}
+                        {placeResultOrderLabel}
                         {mapSearchPreviewPlaces.length ? ` · ${mapSearchPreviewPlaces.length} on map` : ""}
                       </small>
                     </div>
