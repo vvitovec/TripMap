@@ -2948,16 +2948,29 @@ export function App() {
             <strong>TripMap</strong>
           </div>
           <h1>Save the places that made the trip.</h1>
-          <form onSubmit={handleAuth} className="auth-form">
+          <form onSubmit={handleAuth} className="auth-form" data-testid="auth-form">
             {authMode === "register" ? (
-              <input name="name" placeholder="Name" required />
+              <input name="name" data-testid="auth-name-input" placeholder="Name" required />
             ) : null}
-            <input name="email" placeholder="Email" type="email" required />
-            <input name="password" placeholder="Password" type="password" minLength={8} required />
+            <input name="email" data-testid="auth-email-input" placeholder="Email" type="email" required />
+            <input
+              name="password"
+              data-testid="auth-password-input"
+              placeholder="Password"
+              type="password"
+              minLength={8}
+              required
+            />
             {error ? <p className="error">{error}</p> : null}
-            <button disabled={busy}>{authMode === "register" ? "Create account" : "Sign in"}</button>
+            <button data-testid="auth-submit" disabled={busy}>
+              {authMode === "register" ? "Create account" : "Sign in"}
+            </button>
           </form>
-          <button className="text-button" onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}>
+          <button
+            className="text-button"
+            data-testid="auth-mode-toggle"
+            onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
+          >
             {authMode === "login" ? "Create an account" : "I already have an account"}
           </button>
         </section>
@@ -2977,16 +2990,20 @@ export function App() {
         </div>
 
         <div className="action-row">
-          <button onClick={() => openCreateTrip("one_destination")} disabled={busy}>
+          <button
+            data-testid="create-destination-trip"
+            onClick={() => openCreateTrip("one_destination")}
+            disabled={busy}
+          >
             <Plus size={16} /> Destination
           </button>
-          <button onClick={() => openCreateTrip("road_trip")} disabled={busy}>
+          <button data-testid="create-road-trip" onClick={() => openCreateTrip("road_trip")} disabled={busy}>
             <Route size={16} /> Road trip
           </button>
         </div>
 
         {showCreateTrip ? (
-          <form className="create-trip-panel" onSubmit={createTrip}>
+          <form className="create-trip-panel" data-testid="create-trip-panel" onSubmit={createTrip}>
             <div className="panel-heading">
               <div>
                 <p className="eyebrow">New trip</p>
@@ -2997,12 +3014,14 @@ export function App() {
               </button>
             </div>
             <input
+              data-testid="create-trip-title"
               value={newTripTitle}
               onChange={(event) => setNewTripTitle(event.target.value)}
               placeholder="Trip name"
               required
             />
             <textarea
+              data-testid="create-trip-description"
               value={newTripDescription}
               onChange={(event) => setNewTripDescription(event.target.value)}
               placeholder="Short description"
@@ -3035,7 +3054,11 @@ export function App() {
                 </option>
               ))}
             </select>
-            <button className="wide-button" disabled={busy || !newTripTitle.trim() || Boolean(newTripTimeError)}>
+            <button
+              className="wide-button"
+              data-testid="create-trip-submit"
+              disabled={busy || !newTripTitle.trim() || Boolean(newTripTimeError)}
+            >
               <Check size={16} /> Create trip
             </button>
           </form>
@@ -3973,7 +3996,11 @@ export function App() {
                     </div>
                   ) : null}
                   {topVisiblePlace ? (
-                    <div className="place-followup-search" data-testid="top-place-followup">
+                    <div
+                      className="place-followup-search"
+                      data-testid="top-place-followup"
+                      aria-label={`Search near ${topVisibleSavedStop?.title ?? topVisiblePlace.name}`}
+                    >
                       <span>
                         <strong>Search near {topVisibleSavedStop?.title ?? topVisiblePlace.name}</strong>
                         <small>Use this result as the next anchor before adding it.</small>
@@ -3982,6 +4009,7 @@ export function App() {
                         {topPlaceFollowUpChips.map((chip) => (
                           <button
                             key={chip.query}
+                            data-testid={`top-place-followup-${chip.query.replace(/\s+/g, "-")}`}
                             onClick={() => searchNearPlace(topVisiblePlace, chip.query, topVisibleSavedStop)}
                             type="button"
                           >
