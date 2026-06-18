@@ -1015,7 +1015,6 @@ export function App() {
     [detail?.stops, queuedPlaceIds, visiblePlaceResults]
   );
   const topVisibleSavedStop = topVisiblePlace ? savedStopForPlace(topVisiblePlace) : null;
-  const topVisibleRecommendation = topVisiblePlace ? topPlaceRecommendation(topVisiblePlace, topVisibleSavedStop) : null;
   const activePreset = useMemo(
     () => destinationPresets.find((preset) => preset.id === activePresetId) ?? null,
     [activePresetId]
@@ -1154,6 +1153,7 @@ export function App() {
     orderedStops.forEach((stop, index) => indexes.set(stop.id, index));
     return indexes;
   }, [orderedStops]);
+  const topVisibleRecommendation = topVisiblePlace ? topPlaceRecommendation(topVisiblePlace, topVisibleSavedStop) : null;
   const activeMemoryScope = activeStop && memoryScope === "active" ? "active" : "all";
   const visibleMedia = useMemo(() => {
     if (!detail) return [];
