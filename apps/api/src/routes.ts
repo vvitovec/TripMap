@@ -846,8 +846,41 @@ function overpassFilter(filter: OverpassTagFilter) {
   return `["${filter.key}"~"^(${filter.values.join("|")})$"]`;
 }
 
-function overpassQuery(filters: OverpassTagFilter[], lat: number, lng: number) {
-  const radiusMeters = 25_000;
+function nearbySearchRadiusMeters(query: string) {
+  if (
+    [
+      "restaurant",
+      "cafe",
+      "bakery",
+      "ice cream",
+      "bar",
+      "parking",
+      "toilets",
+      "atm",
+      "pharmacy"
+    ].includes(query)
+  ) {
+    return 5000;
+  }
+  if (
+    [
+      "hotel",
+      "resort",
+      "hostel",
+      "motel",
+      "guest house",
+      "apartment",
+      "fuel",
+      "charging station",
+      "supermarket"
+    ].includes(query)
+  ) {
+    return 12_000;
+  }
+  return 25_000;
+}
+
+function overpassQuery(filters: OverpassTagFilter[], lat: number, lng: number, radiusMeters: number) {
   const clauses = filters
     .flatMap((filter) => {
       const tag = overpassFilter(filter);
@@ -923,6 +956,7 @@ function normalizeOverpassPlace(element: OverpassElement, filters: OverpassTagFi
 async function searchOverpassPlaces(query: string, lat: number, lng: number) {
   const filters = overpassCategoryTags.get(query);
   if (!filters?.length) return [];
+  const radiusMeters = nearbySearchRadiusMeters(query);
   const response = await fetch("https://overpass-api.de/api/interpreter", {
     method: "POST",
     headers: {
@@ -930,7 +964,7 @@ async function searchOverpassPlaces(query: string, lat: number, lng: number) {
       "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
       Referer: "https://trip.vvitovec.com"
     },
-    body: new URLSearchParams({ data: overpassQuery(filters, lat, lng) }),
+    body: new URLSearchParams({ data: overpassQuery(filters, lat, lng, radiusMeters) }),
     signal: AbortSignal.timeout(8000)
   });
   if (!response.ok) {
@@ -1086,9 +1120,11 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
         ])
       : [await searchNominatimPlaces(), []];
   const mergedPlaces = mergePlaces(nominatimPlaces, overpassPlaces);
+  const nearbyRadiusKm = nearbySearchRadiusMeters(normalizedQuery) / 1000;
   const places =
     searchAnchor && isNearbyCategory
       ? [...mergedPlaces]
+          .filter((place) => distanceKm(searchAnchor, place) <= nearbyRadiusKm)
           .sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b))
           .slice(0, 24)
       : mergedPlaces.slice(0, 24);
