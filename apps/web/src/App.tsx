@@ -924,6 +924,16 @@ export function App() {
       : searchOrigin === "map" && mapFocus
         ? mapFocus
         : contextSearchAnchor;
+  const placeSearchAnchorKey = searchAnchor
+    ? `${searchAnchor.lat.toFixed(5)},${searchAnchor.lng.toFixed(5)}`
+    : "";
+  const placeSearchAnchor = useMemo(() => {
+    if (!placeSearchAnchorKey) return undefined;
+    const parts = placeSearchAnchorKey.split(",");
+    const lat = Number(parts[0]);
+    const lng = Number(parts[1]);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined;
+  }, [placeSearchAnchorKey]);
   const searchAnchorLabel =
     searchOrigin === "draft" && placeDraft
       ? "draft place"
@@ -1320,7 +1330,7 @@ export function App() {
     setSearchingPlaces(true);
     const timer = window.setTimeout(() => {
       api
-        .searchPlaces(query, searchAnchor)
+        .searchPlaces(query, placeSearchAnchor)
         .then(({ places }) => {
           if (!cancelled) setPlaceResults(places);
         })
@@ -1335,7 +1345,7 @@ export function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [placeQuery, searchAnchor, selectedTripId, user]);
+  }, [placeQuery, placeSearchAnchor, selectedTripId, user]);
 
   useEffect(() => {
     try {
