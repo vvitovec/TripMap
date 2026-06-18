@@ -60,6 +60,7 @@ type LocatedMediaGroup = {
 
 const recentPlacesKey = "tripmap.recentPlaces.v1";
 const recentPlacesLimit = 12;
+const destinationListLimit = 12;
 
 const placeChipGroups = [
   {
@@ -262,6 +263,13 @@ function placeLocationKey(place: PlaceSearchResult) {
   return `${normalizedPlaceName(place.name)}-${place.lat.toFixed(3)}-${place.lng.toFixed(3)}`;
 }
 
+function cleanDestinationListLine(line: string) {
+  return line
+    .replace(/^\s*(?:[-*]|\d+[.)])\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function isPlaceSearchResult(value: unknown): value is PlaceSearchResult {
   if (!value || typeof value !== "object") return false;
   const place = value as PlaceSearchResult;
@@ -357,6 +365,9 @@ export function App() {
   const [manualLng, setManualLng] = useState("");
   const [manualLabel, setManualLabel] = useState("");
   const [routeQueue, setRouteQueue] = useState<QueuedPlace[]>([]);
+  const [destinationListText, setDestinationListText] = useState("");
+  const [destinationListStatus, setDestinationListStatus] = useState("");
+  const [importingDestinationList, setImportingDestinationList] = useState(false);
   const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
   const [searchOrigin, setSearchOrigin] = useState<SearchOrigin>("context");
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
@@ -607,6 +618,15 @@ export function App() {
     [...orderedStops].reverse().forEach((stop) => addRecent(stopToPlace(stop)));
     return [...places.values()].slice(0, 6);
   }, [orderedStops, placeDraft, recentPlaces, routeQueue]);
+  const destinationListQueries = useMemo(
+    () =>
+      destinationListText
+        .split(/\r?\n/)
+        .map(cleanDestinationListLine)
+        .filter((line, index, lines) => line.length >= 3 && lines.indexOf(line) === index)
+        .slice(0, destinationListLimit),
+    [destinationListText]
+  );
   const topVisiblePlace = visiblePlaceResults[0] ?? null;
   const newTripTimeError = timeRangeError(newTripStartsAt, newTripEndsAt);
   const tripTimeError = timeRangeError(tripStartsAtDraft, tripEndsAtDraft);
@@ -985,6 +1005,8 @@ export function App() {
     setSelectedTripId(id);
     setPlaceQuery("");
     setRouteQueue([]);
+    setDestinationListText("");
+    setDestinationListStatus("");
     resetDestinationDraft();
   }
 
@@ -1158,6 +1180,82 @@ export function App() {
       setError(error instanceof Error ? error.message : String(error));
     } finally {
       setPlanningPresetId(null);
+    }
+  }
+
+  async function queueDestinationList() {
+    if (!selectedTripId) return;
+    const queries = destinationListQueries;
+    if (!queries.length) {
+      setError("Add at least one destination line.");
+      return;
+    }
+
+    setImportingDestinationList(true);
+    setDestinationListStatus("");
+    setDestinationMode("search");
+    setActivePresetId(null);
+    setActivePresetStep(0);
+    setPlanningPresetId(null);
+    setError(null);
+
+    const additions: QueuedPlace[] = [];
+    const misses: string[] = [];
+    const seenPlaceIds = new Set(routeQueue.map((item) => item.place.id));
+    let cursor: { lat: number; lng: number } | undefined = queueAnchor ?? searchAnchor ?? undefined;
+    let lastPlaces: PlaceSearchResult[] = [];
+    let lastQuery = queries[queries.length - 1] ?? "";
+
+    try {
+      for (const query of queries) {
+        const { places } = await api.searchPlaces(query, cursor);
+        lastPlaces = places;
+        lastQuery = query;
+        const nextPlace = places.find(
+          (place) =>
+            !seenPlaceIds.has(place.id) &&
+            !savedStopForPlace(place) &&
+            !additions.some((item) => distanceKm(item.place, place) <= 0.05)
+        );
+
+        if (!nextPlace) {
+          misses.push(query);
+          continue;
+        }
+
+        additions.push({ place: nextPlace, title: nextPlace.name, note: "", arrivedAt: "", departedAt: "" });
+        seenPlaceIds.add(nextPlace.id);
+        cursor = nextPlace;
+      }
+
+      setPlaceQuery(lastQuery);
+      setPlaceResults(lastPlaces);
+      setPlaceResultFilter("all");
+
+      if (!additions.length) {
+        setDestinationListStatus(
+          misses.length
+            ? `No new matches for ${misses.slice(0, 3).join(", ")}${misses.length > 3 ? "..." : ""}`
+            : "No new places found."
+        );
+        return;
+      }
+
+      setRouteQueue((items) => {
+        const existingIds = new Set(items.map((item) => item.place.id));
+        return [...items, ...additions.filter((item) => !existingIds.has(item.place.id))];
+      });
+      additions.forEach((item) => rememberRecentPlace(item.place));
+      setDestinationListText("");
+      setDestinationListStatus(
+        `${additions.length} queued${misses.length ? ` · ${misses.length} skipped` : ""}`
+      );
+      setSearchOrigin("route");
+      setPlaceDraft(null);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setImportingDestinationList(false);
     }
   }
 
@@ -2632,6 +2730,50 @@ export function App() {
                       </div>
                     </div>
                   )}
+                  <div className="destination-list-import">
+                    <div className="destination-list-heading">
+                      <span><Route size={14} /> Paste list</span>
+                      <small>
+                        {destinationListQueries.length
+                          ? `${destinationListQueries.length} ready`
+                          : destinationPlacementLabel()}
+                      </small>
+                    </div>
+                    <textarea
+                      value={destinationListText}
+                      onChange={(event) => {
+                        setDestinationListText(event.target.value);
+                        setDestinationListStatus("");
+                      }}
+                      placeholder={`Grand Hotel\nOld Town Square\nhttps://maps.app.goo.gl/...`}
+                      rows={3}
+                    />
+                    <div className="destination-list-actions">
+                      <button
+                        onClick={queueDestinationList}
+                        disabled={busy || importingDestinationList || !destinationListQueries.length}
+                        type="button"
+                      >
+                        {importingDestinationList ? <Loader2 className="spin" size={14} /> : <ListFilter size={14} />}
+                        {importingDestinationList
+                          ? "Finding"
+                          : destinationListQueries.length
+                            ? `Find + queue ${destinationListQueries.length}`
+                            : "Find + queue"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDestinationListText("");
+                          setDestinationListStatus("");
+                        }}
+                        disabled={busy || importingDestinationList || !destinationListText.trim()}
+                        type="button"
+                      >
+                        <X size={14} /> Clear
+                      </button>
+                    </div>
+                    {destinationListStatus ? <small className="destination-list-status">{destinationListStatus}</small> : null}
+                  </div>
                 </>
               ) : (
                 <div className="coordinate-entry">
