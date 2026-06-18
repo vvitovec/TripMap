@@ -104,7 +104,7 @@ const mediaUpdateSchema = z.object({
 });
 
 const placeSearchSchema = z.object({
-  q: z.string().trim().min(3).max(180),
+  q: z.string().trim().min(3).max(1200),
   lat: z.coerce.number().min(-90).max(90).optional(),
   lng: z.coerce.number().min(-180).max(180).optional()
 });
@@ -386,15 +386,52 @@ function nearbyCategoryIntent(query: string) {
   return nearbyCategoryQueries.get(meaningfulQuery) ?? null;
 }
 
+function safeDecode(value: string) {
+  const withSpaces = value.replace(/\+/g, " ");
+  try {
+    return decodeURIComponent(withSpaces);
+  } catch {
+    return withSpaces;
+  }
+}
+
+function cleanedMapLinkText(value: string) {
+  return safeDecode(value)
+    .replace(/[@!].*$/, "")
+    .replace(/[/?#&=]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mapLinkSearchText(query: string) {
+  const trimmed = query.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+
+  const paramNames = ["q", "query", "destination", "daddr", "saddr", "address"];
+  for (const name of paramNames) {
+    const value = url.searchParams.get(name);
+    if (!value || parseCoordinateQuery(value)) continue;
+    const cleaned = cleanedMapLinkText(value);
+    if (cleaned.length >= 3) return cleaned;
+  }
+
+  const pathParts = url.pathname
+    .split("/")
+    .map(cleanedMapLinkText)
+    .filter((part) => part.length >= 3 && !["maps", "place", "search", "dir"].includes(part.toLowerCase()));
+  return pathParts[0] ?? null;
+}
+
 function parseCoordinateQuery(query: string) {
   const trimmed = query.trim();
-  const decoded = (() => {
-    try {
-      return decodeURIComponent(trimmed);
-    } catch {
-      return trimmed;
-    }
-  })();
+  const decoded = safeDecode(trimmed);
   const coordinatePatterns = [
     /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
     /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
@@ -558,8 +595,10 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     return places;
   }
 
-  const categoryIntent = nearbyCategoryIntent(input.q);
-  const normalizedQuery = categoryIntent ?? input.q.trim();
+  const linkSearchText = mapLinkSearchText(input.q);
+  const queryText = linkSearchText ?? input.q.trim();
+  const categoryIntent = nearbyCategoryIntent(queryText);
+  const normalizedQuery = categoryIntent ?? queryText;
   const hasAnchor = input.lat !== undefined && input.lng !== undefined;
   const isNearbyCategory = Boolean(categoryIntent);
 
