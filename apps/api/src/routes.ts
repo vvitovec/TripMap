@@ -821,7 +821,9 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   const naturalAnchor = naturalSearch
     ? await geocodeSearchAnchor(naturalSearch.anchorQuery, inputAnchor).catch(() => null)
     : null;
-  const categoryIntent = naturalAnchor && naturalSearch ? naturalSearch.category : nearbyCategoryIntent(queryText);
+  const categoryIntent = naturalSearch && (naturalAnchor || inputAnchor)
+    ? naturalSearch.category
+    : nearbyCategoryIntent(queryText);
   const normalizedQuery = categoryIntent ?? queryText;
   const searchAnchor = naturalAnchor ?? inputAnchor;
   const hasAnchor = Boolean(searchAnchor);
