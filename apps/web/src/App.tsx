@@ -3860,6 +3860,31 @@ export function App() {
                     <span><MapPin size={14} /> {destinationPlacementLabel()}</span>
                     <span><ListFilter size={14} /> {routeQueue.length} queued</span>
                   </div>
+                  <div className="route-queue-quickbar" data-testid="route-queue-quickbar">
+                    <span>
+                      <strong>Ready to add {routeQueue.length} stop{routeQueue.length === 1 ? "" : "s"}</strong>
+                      <small>{queuedRouteKm ? `${formatDistance(queuedRouteKm)} planned` : `Starting from ${routeSearchAnchor?.name ?? searchAnchorLabel}`}</small>
+                    </span>
+                    <button
+                      className="route-queue-primary"
+                      onClick={addQueuedPlaces}
+                      disabled={busy || Boolean(queuedTimeErrors.size)}
+                      data-testid="route-queue-commit"
+                      type="button"
+                    >
+                      <Plus size={15} /> {queuedAddLabel()}
+                    </button>
+                    <button
+                      onClick={optimizeQueuedPlaces}
+                      disabled={busy || routeQueue.length < 3}
+                      type="button"
+                    >
+                      <Route size={15} /> Optimize
+                    </button>
+                    <button onClick={() => setRouteQueue([])} disabled={busy} type="button" title="Clear queue">
+                      <X size={15} />
+                    </button>
+                  </div>
                   <div className="route-queue-next" data-testid="route-queue-next">
                     <span>
                       <strong>Keep planning from {routeSearchAnchor?.name ?? "the route end"}</strong>

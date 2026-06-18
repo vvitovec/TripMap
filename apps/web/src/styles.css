@@ -1667,6 +1667,75 @@ textarea {
   font-weight: 700;
 }
 
+.route-queue-quickbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 34px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #f4e4d2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.route-queue-quickbar span,
+.route-queue-quickbar strong,
+.route-queue-quickbar small {
+  display: block;
+  min-width: 0;
+}
+
+.route-queue-quickbar strong,
+.route-queue-quickbar small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-queue-quickbar strong {
+  color: #7c2d12;
+  font-size: 13px;
+}
+
+.route-queue-quickbar small {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.route-queue-quickbar button {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid #f4e4d2;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 10px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.route-queue-quickbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.route-queue-quickbar .route-queue-primary {
+  border-color: #9a3412;
+  background: #9a3412;
+  color: #fff;
+}
+
+.route-queue-quickbar button[title] {
+  width: 34px;
+  padding: 5px;
+}
+
 .route-queue-next {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -2599,6 +2668,15 @@ textarea {
 
   .route-queue-summary {
     grid-template-columns: 1fr;
+  }
+
+  .route-queue-quickbar {
+    grid-template-columns: 1fr;
+  }
+
+  .route-queue-quickbar button,
+  .route-queue-quickbar button[title] {
+    width: 100%;
   }
 
   .route-queue-next {
