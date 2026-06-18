@@ -435,7 +435,12 @@ function destinationItemsFromText(value: string) {
     const action = extractDestinationAction(line);
     const item = splitDestinationNote(action.query);
     item.note = combineDestinationNotes(activeSectionNote, context.note, action.note, item.note);
-    if (item.query.length < 3 || items.some((existing) => existing.query === item.query)) continue;
+    if (item.query.length < 3) continue;
+    const existingItem = items.find((existing) => existing.query === item.query);
+    if (existingItem) {
+      existingItem.note = combineDestinationNotes(existingItem.note, item.note);
+      continue;
+    }
     items.push(item);
     if (items.length >= destinationListLimit) break;
   }
