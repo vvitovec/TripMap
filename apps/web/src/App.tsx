@@ -518,6 +518,17 @@ function isDestinationNoiseLine(line: string) {
 function extractDestinationAction(line: string): DestinationListItem {
   if (/https?:\/\//i.test(line)) return { query: line, note: "" };
   const patterns: Array<{ pattern: RegExp; note: string }> = [
+    { pattern: /^(?:hotel|stay|accommodation|lodging)\s*[:.)-]\s*(.{3,})$/i, note: "Stay" },
+    { pattern: /^(?:resort|hostel|guest\s*house|apartment|cabin|camp(?:site|ground)?)\s*[:.)-]\s*(.{3,})$/i, note: "Stay" },
+    { pattern: /^(lunch|dinner|breakfast|coffee)\s*[:.)-]\s*(.{3,})$/i, note: "" },
+    { pattern: /^(?:meal|food|restaurant)\s*[:.)-]\s*(.{3,})$/i, note: "Meal" },
+    { pattern: /^(?:cafe)\s*[:.)-]\s*(.{3,})$/i, note: "Coffee" },
+    { pattern: /^(?:bar)\s*[:.)-]\s*(.{3,})$/i, note: "Drinks" },
+    { pattern: /^(?:visit|sight|sights|landmark|museum|park|beach|viewpoint|attraction)\s*[:.)-]\s*(.{3,})$/i, note: "Visit" },
+    { pattern: /^(?:photo|photo\s*stop|scenic|view|lookout)\s*[:.)-]\s*(.{3,})$/i, note: "Photo stop" },
+    { pattern: /^(?:parking|garage)\s*[:.)-]\s*(.{3,})$/i, note: "Parking" },
+    { pattern: /^(?:fuel|gas|petrol|ev\s*charge|ev\s*charging|charger)\s*[:.)-]\s*(.{3,})$/i, note: "Fuel stop" },
+    { pattern: /^(?:airport|station|train|bus|metro|ferry|transit)\s*[:.)-]\s*(.{3,})$/i, note: "Transit" },
     { pattern: /^(?:stay|sleep|overnight)\s+(?:at|in)\s+(.{3,})$/i, note: "Stay" },
     { pattern: /^check[-\s]?in\s+(?:at|to)\s+(.{3,})$/i, note: "Check-in" },
     { pattern: /^(?:visit|see|explore|tour)\s+(.{3,})$/i, note: "Visit" },
