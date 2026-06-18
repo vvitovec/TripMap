@@ -73,6 +73,8 @@ const placeChipGroups = [
       { label: "Hostels", query: "hostel", hint: "Budget" },
       { label: "Motels", query: "motel", hint: "Roadside" },
       { label: "Guesthouses", query: "guesthouse", hint: "Local stays" },
+      { label: "Apartments", query: "apartment", hint: "Longer stays" },
+      { label: "Cabins", query: "cabin", hint: "Remote" },
       { label: "Campsites", query: "campsite", hint: "Outdoors" }
     ]
   },
@@ -84,8 +86,12 @@ const placeChipGroups = [
       { label: "Museums", query: "museum", hint: "Culture" },
       { label: "Parks", query: "park", hint: "Outdoors" },
       { label: "Beaches", query: "beach", hint: "Coast" },
+      { label: "Historic", query: "historic site", hint: "Heritage" },
       { label: "Monuments", query: "monument", hint: "Icons" },
       { label: "Castles", query: "castle", hint: "Historic" },
+      { label: "Churches", query: "church", hint: "Sacred" },
+      { label: "Bridges", query: "bridge", hint: "Crossings" },
+      { label: "Ruins", query: "ruins", hint: "Old sites" },
       { label: "Trails", query: "trail", hint: "Walks" },
       { label: "Waterfalls", query: "waterfall", hint: "Nature" },
       { label: "Theme parks", query: "theme park", hint: "Fun" },
@@ -99,6 +105,14 @@ const placeChipGroups = [
       { label: "Restaurants", query: "restaurant", hint: "Meals" },
       { label: "Cafes", query: "cafe", hint: "Breaks" },
       { label: "Bars", query: "bar", hint: "Evening" }
+    ]
+  },
+  {
+    title: "Relax",
+    chips: [
+      { label: "Spas", query: "spa", hint: "Wellness" },
+      { label: "Pools", query: "swimming pool", hint: "Swim" },
+      { label: "Marinas", query: "marina", hint: "Waterfront" }
     ]
   },
   {
@@ -289,11 +303,14 @@ function defaultPlaceNote(place: PlaceSearchResult, query = "") {
   if (/\b(rest area|rest stop)\b/.test(text)) return "Rest stop";
   if (/\b(parking)\b/.test(text)) return "Parking";
   if (/\b(airport|station|bus stop|metro|ferry|transit|rail)\b/.test(text)) return "Transit";
-  if (/\b(grocery|marketplace|supplies)\b/.test(text)) return "Supplies";
+  if (/\b(grocery|supermarket|convenience|marketplace|supplies)\b/.test(text)) return "Supplies";
   if (/\b(pharmacy|hospital|clinic|doctors)\b/.test(text)) return "Health stop";
   if (/\b(atm|cash)\b/.test(text)) return "Cash";
+  if (/\b(spa|wellness|thermal bath)\b/.test(text)) return "Relax";
+  if (/\b(swimming pool|pool|water park)\b/.test(text)) return "Swim";
+  if (/\b(marina)\b/.test(text)) return "Waterfront";
   if (/\b(viewpoint|photo)\b/.test(text)) return "Photo stop";
-  if (/\b(landmark|tourist attraction|attraction|museum|park|beach|monument|castle|trail|waterfall|historic|ruins|zoo|aquarium|theme park)\b/.test(text)) {
+  if (/\b(landmark|tourist attraction|attraction|museum|park|beach|monument|castle|church|cathedral|temple|mosque|synagogue|bridge|trail|waterfall|historic|ruins|zoo|aquarium|theme park)\b/.test(text)) {
     return "Visit";
   }
   return "";
