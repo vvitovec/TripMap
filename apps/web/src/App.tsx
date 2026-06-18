@@ -324,8 +324,68 @@ function placeLocationKey(place: PlaceSearchResult) {
   return `${normalizedPlaceName(place.name)}-${place.lat.toFixed(3)}-${place.lng.toFixed(3)}`;
 }
 
+function isKnownMapShareUrl(value: string) {
+  const text = value.trim();
+  if (!/^https?:\/\//i.test(text)) return false;
+  try {
+    const url = new URL(text);
+    const host = url.hostname.toLowerCase();
+    return (
+      host === "maps.app.goo.gl" ||
+      host === "goo.gl" ||
+      host === "maps.google.com" ||
+      host === "www.google.com" ||
+      host === "google.com" ||
+      host.endsWith(".google.com") ||
+      host === "maps.apple.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isMapShareContextLine(value: string) {
+  const text = value.trim();
+  return Boolean(text) && !isKnownMapShareUrl(text) && !/^(?:day\s*\d+|d\d+|route|trip|itinerary)$/i.test(text);
+}
+
+function looksLikeAddressLine(value: string) {
+  return (
+    value.includes(",") &&
+    (/\d/.test(value) || /\b(?:street|st|road|rd|avenue|ave|square|plaza|lane|ln|drive|dr|boulevard|blvd|city|town|village|country)\b/i.test(value))
+  );
+}
+
+function collapseMapShareBlocks(value: string) {
+  const lines = value.split(/\r?\n/);
+  const collapsed: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!isKnownMapShareUrl(trimmed)) {
+      collapsed.push(line);
+      continue;
+    }
+
+    const previous = collapsed.at(-1)?.trim() ?? "";
+    const beforePrevious = collapsed.at(-2)?.trim() ?? "";
+    if (!isMapShareContextLine(previous)) {
+      collapsed.push(line);
+      continue;
+    }
+
+    collapsed.pop();
+    if (looksLikeAddressLine(previous) && isMapShareContextLine(beforePrevious)) {
+      collapsed.pop();
+      collapsed.push(`${beforePrevious}, ${previous}`);
+    } else {
+      collapsed.push(previous);
+    }
+  }
+  return collapsed.join("\n");
+}
+
 function destinationTextSegments(value: string) {
-  return value
+  return collapseMapShareBlocks(value)
     .replace(/\s*(?:->|=>|-->|>>|\u2192|\u21d2)\s*/g, "\n")
     .replace(/[;|]+/g, "\n")
     .split(/\r?\n/)
