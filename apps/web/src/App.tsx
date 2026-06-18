@@ -343,6 +343,29 @@ function cleanDestinationListLine(line: string) {
     .replace(/^[,.: -]+|[,.: -]+$/g, "");
 }
 
+function extractDestinationAction(line: string): DestinationListItem {
+  if (/https?:\/\//i.test(line)) return { query: line, note: "" };
+  const patterns: Array<{ pattern: RegExp; note: string }> = [
+    { pattern: /^(?:stay|sleep|overnight)\s+(?:at|in)\s+(.{3,})$/i, note: "Stay" },
+    { pattern: /^check[-\s]?in\s+(?:at|to)\s+(.{3,})$/i, note: "Check-in" },
+    { pattern: /^(?:visit|see|explore|tour)\s+(.{3,})$/i, note: "Visit" },
+    { pattern: /^(lunch|dinner|breakfast|coffee)\s+(?:at|in)\s+(.{3,})$/i, note: "" },
+    { pattern: /^photo\s+stop\s+(?:at|in)\s+(.{3,})$/i, note: "Photo stop" },
+    { pattern: /^stop\s+(?:at|in)\s+(.{3,})$/i, note: "Stop" },
+    { pattern: /^(?:arrive|arrival)\s+(?:at|in|to)\s+(.{3,})$/i, note: "Arrive" },
+    { pattern: /^(?:depart|departure)\s+from\s+(.{3,})$/i, note: "Depart" }
+  ];
+
+  for (const { pattern, note } of patterns) {
+    const match = line.match(pattern);
+    if (!match) continue;
+    const query = (match[2] ?? match[1] ?? "").trim();
+    const actionNote = note || titleize(match[1] ?? "");
+    if (query.length >= 3 && actionNote) return { query, note: actionNote };
+  }
+  return { query: line, note: "" };
+}
+
 function splitDestinationNote(line: string): DestinationListItem {
   if (/https?:\/\//i.test(line)) return { query: line, note: "" };
   const match = line.match(/^(.{3,}?)\s+(?:--|[-\u2013\u2014])\s+(.{3,})$/);
@@ -368,8 +391,9 @@ function destinationItemsFromText(value: string) {
     const line = cleanDestinationListLine(context.line);
     if (!line && sectionNote) continue;
     if (line.length < 3 || ignored.has(line.toLowerCase())) continue;
-    const item = splitDestinationNote(line);
-    item.note = combineDestinationNotes(activeSectionNote, context.note, item.note);
+    const action = extractDestinationAction(line);
+    const item = splitDestinationNote(action.query);
+    item.note = combineDestinationNotes(activeSectionNote, context.note, action.note, item.note);
     if (item.query.length < 3 || items.some((existing) => existing.query === item.query)) continue;
     items.push(item);
     if (items.length >= destinationListLimit) break;
