@@ -386,7 +386,7 @@ function nearbyCategoryIntent(query: string) {
   return nearbyCategoryQueries.get(meaningfulQuery) ?? null;
 }
 
-function canUseSuffixCategoryAlias(alias: string) {
+function canUseShorthandCategoryAlias(alias: string) {
   const category = nearbyCategoryQueries.get(alias);
   if (!category) return false;
   if (alias.endsWith("s")) return true;
@@ -408,13 +408,32 @@ function parseNaturalNearbySearch(query: string) {
     if (category && anchorQuery.length >= 3) return { category, anchorQuery };
   }
 
+  const pairedParts = normalized
+    .split(/\s*[,;:]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (pairedParts.length === 2) {
+    const [first, second] = pairedParts;
+    const firstCategory = nearbyCategoryIntent(first!);
+    const secondCategory = nearbyCategoryIntent(second!);
+    if (firstCategory && second!.length >= 3) return { category: firstCategory, anchorQuery: second! };
+    if (secondCategory && first!.length >= 3) return { category: secondCategory, anchorQuery: first! };
+  }
+
   const suffixAliases = [...nearbyCategoryQueries.keys()]
-    .filter(canUseSuffixCategoryAlias)
+    .filter(canUseShorthandCategoryAlias)
     .sort((a, b) => b.length - a.length);
   for (const alias of suffixAliases) {
     const suffix = ` ${alias}`;
     if (!lower.endsWith(suffix)) continue;
     const anchorQuery = normalized.slice(0, normalized.length - alias.length).trim();
+    if (anchorQuery.length >= 3) return { category: nearbyCategoryQueries.get(alias)!, anchorQuery };
+  }
+
+  for (const alias of suffixAliases) {
+    const prefix = `${alias} `;
+    if (!lower.startsWith(prefix)) continue;
+    const anchorQuery = normalized.slice(alias.length).trim();
     if (anchorQuery.length >= 3) return { category: nearbyCategoryQueries.get(alias)!, anchorQuery };
   }
 
