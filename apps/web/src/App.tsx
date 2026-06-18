@@ -887,15 +887,30 @@ export function App() {
     const query = (category: string) => (anchor ? `${category} near ${anchor}` : category);
     const seeds =
       currentTrip?.type === "road_trip"
-        ? [
-            { label: "Fuel next", category: "fuel" },
-            { label: "Rest stop", category: "rest area" },
-            { label: "Food nearby", category: "restaurant" }
-          ]
+        ? routeQueue.length
+          ? [
+              { label: "Fuel next", category: "fuel" },
+              { label: "EV charge", category: "ev charging" },
+              { label: "Rest stop", category: "rest area" },
+              { label: "Food next", category: "restaurant" },
+              { label: "Hotel next", category: "hotel" },
+              { label: "Parking", category: "parking" }
+            ]
+          : [
+              { label: "Hotels", category: "hotel" },
+              { label: "Resorts", category: "resort" },
+              { label: "Fuel", category: "fuel" },
+              { label: "EV charge", category: "ev charging" },
+              { label: "Landmarks", category: "landmark" },
+              { label: "Food", category: "restaurant" }
+            ]
         : [
-            { label: "Stay nearby", category: "hotel" },
+            { label: "Hotels", category: "hotel" },
+            { label: "Resorts", category: "resort" },
             { label: "Landmarks", category: "landmark" },
-            { label: "Food nearby", category: "restaurant" }
+            { label: "Viewpoints", category: "viewpoint" },
+            { label: "Food nearby", category: "restaurant" },
+            { label: "Parking", category: "parking" }
           ];
 
     return seeds.map((seed) => ({
@@ -904,7 +919,7 @@ export function App() {
       hint,
       mode
     }));
-  }, [currentTrip?.type, namedSearchAnchor, searchAnchorLabel]);
+  }, [currentTrip?.type, namedSearchAnchor, routeQueue.length, searchAnchorLabel]);
   const draftExploreChips = useMemo(() => {
     const queries =
       currentTrip?.type === "road_trip"
