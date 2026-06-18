@@ -31,6 +31,7 @@ export function TripMap({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const tripsSourceReadyRef = useRef(false);
   const callbacksRef = useRef({
     onMapClick,
     onSelectPreviewPlace,
@@ -149,6 +150,8 @@ export function TripMap({
       ]
     };
   }, [effectivePreviewPlaces, previewRoutePoints, selectedStopId, selectedTripId, trips]);
+  const latestGeojsonRef = useRef(geojson);
+  latestGeojsonRef.current = geojson;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -180,9 +183,9 @@ export function TripMap({
       callbacksRef.current.onViewChange?.({ lat: center.lat, lng: center.lng });
     };
 
-    map.on("load", () => {
+    const handleLoad = () => {
       reportCenter();
-      map.addSource("trips", { type: "geojson", data: geojson });
+      map.addSource("trips", { type: "geojson", data: latestGeojsonRef.current });
       map.addLayer({
         id: "trip-lines",
         type: "line",
@@ -263,7 +266,10 @@ export function TripMap({
           "text-halo-width": 1.2
         }
       });
-    });
+      tripsSourceReadyRef.current = true;
+    };
+
+    map.on("load", handleLoad);
 
     map.on("click", "trip-points", (event) => {
       const feature = event.features?.[0];
@@ -286,6 +292,8 @@ export function TripMap({
 
     mapRef.current = map;
     return () => {
+      tripsSourceReadyRef.current = false;
+      map.off("load", handleLoad);
       mapRef.current = null;
       map.remove();
     };
@@ -293,7 +301,7 @@ export function TripMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
+    if (!map?.isStyleLoaded() || !tripsSourceReadyRef.current) return;
     const source = map.getSource("trips") as maplibregl.GeoJSONSource | undefined;
     source?.setData(geojson);
   }, [geojson]);
