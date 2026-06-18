@@ -2413,7 +2413,7 @@ export function App() {
                         setPlaceQuery(event.target.value);
                       }}
                       onKeyDown={handlePlaceSearchKeyDown}
-                      placeholder="Address, hotel, landmark, coordinates"
+                      placeholder="Address, hotel, landmark, map link"
                     />
                     {placeQuery ? (
                       <button

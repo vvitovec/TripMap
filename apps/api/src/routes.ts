@@ -337,13 +337,29 @@ function nearbyCategoryIntent(query: string) {
 
 function parseCoordinateQuery(query: string) {
   const trimmed = query.trim();
-  const urlMatch = trimmed.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
-  const directMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)$/);
-  const match = urlMatch ?? directMatch;
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(trimmed);
+    } catch {
+      return trimmed;
+    }
+  })();
+  const coordinatePatterns = [
+    /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
+    /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
+    /[?&#](?:q|ll|center|destination|daddr|saddr)=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)(?:[&#]|$)/i,
+    /[?&#](?:query)=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)(?:[&#]|$)/i,
+    /^(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)$/
+  ];
+  const match = coordinatePatterns
+    .map((pattern) => decoded.match(pattern) ?? trimmed.match(pattern))
+    .find((result): result is RegExpMatchArray => Boolean(result));
   if (!match) return null;
 
-  const lat = Number(match[1]);
-  const lng = Number(match[2]);
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  const lat = Math.abs(first) <= 90 && Math.abs(second) <= 180 ? first : second;
+  const lng = lat === first ? second : first;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
   return { lat, lng };
