@@ -270,6 +270,14 @@ function cleanDestinationListLine(line: string) {
     .trim();
 }
 
+function destinationLinesFromText(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map(cleanDestinationListLine)
+    .filter((line, index, lines) => line.length >= 3 && lines.indexOf(line) === index)
+    .slice(0, destinationListLimit);
+}
+
 function isPlaceSearchResult(value: unknown): value is PlaceSearchResult {
   if (!value || typeof value !== "object") return false;
   const place = value as PlaceSearchResult;
@@ -619,12 +627,7 @@ export function App() {
     return [...places.values()].slice(0, 6);
   }, [orderedStops, placeDraft, recentPlaces, routeQueue]);
   const destinationListQueries = useMemo(
-    () =>
-      destinationListText
-        .split(/\r?\n/)
-        .map(cleanDestinationListLine)
-        .filter((line, index, lines) => line.length >= 3 && lines.indexOf(line) === index)
-        .slice(0, destinationListLimit),
+    () => destinationLinesFromText(destinationListText),
     [destinationListText]
   );
   const topVisiblePlace = visiblePlaceResults[0] ?? null;
@@ -1070,6 +1073,28 @@ export function App() {
       return;
     }
     selectPlace(topVisiblePlace);
+  }
+
+  function handlePlaceSearchPaste(event: React.ClipboardEvent<HTMLInputElement>) {
+    const pasted = event.clipboardData.getData("text");
+    const lines = destinationLinesFromText(pasted);
+    if (lines.length < 2) return;
+
+    event.preventDefault();
+    const existingLines = destinationLinesFromText(destinationListText);
+    const merged = [...existingLines, ...lines]
+      .filter((line, index, list) => list.indexOf(line) === index)
+      .slice(0, destinationListLimit);
+    setDestinationListText(merged.join("\n"));
+    setDestinationListStatus(`${merged.length} ready in the destination list.`);
+    setPlaceQuery("");
+    setPlaceResults([]);
+    setPlaceResultFilter("all");
+    setActivePresetId(null);
+    setActivePresetStep(0);
+    setPlanningPresetId(null);
+    setDestinationMode("search");
+    setError(null);
   }
 
   function searchNearbyCategory(query: string) {
@@ -2607,6 +2632,7 @@ export function App() {
                         setPlaceQuery(event.target.value);
                       }}
                       onKeyDown={handlePlaceSearchKeyDown}
+                      onPaste={handlePlaceSearchPaste}
                       placeholder="Address, hotel, landmark, map link"
                     />
                     {placeQuery ? (
