@@ -520,12 +520,30 @@ function isDestinationNoiseLine(line: string) {
       "reserve",
       "book",
       "open",
-      "closed"
+      "closed",
+      "fastest route",
+      "alternate route",
+      "avoid tolls",
+      "avoid highways",
+      "start navigation"
     ].includes(lower)
   ) {
     return true;
   }
   if (/^\+?\d[\d\s().-]{5,}$/.test(line)) return true;
+  if (/^\d+(?:[.,]\d+)?\s*(?:m|km|mi|miles?)$/i.test(line)) return true;
+  if (
+    /^\d+(?:[.,]\d+)?\s*(?:m|km|mi|miles?)\s*(?:[.\u00b7,-]|\s)\s*(?:about\s+)?\d+\s*(?:h|hr|hrs|hour|hours|m|min|mins|minute|minutes)/i.test(line)
+  ) {
+    return true;
+  }
+  if (/^(?:about\s+)?\d+\s*(?:h|hr|hrs|hour|hours)(?:\s+\d+\s*(?:m|min|mins|minute|minutes))?$/i.test(line)) return true;
+  if (/^(?:about\s+)?\d+\s*(?:m|min|mins|minute|minutes)$/i.test(line)) return true;
+  if (
+    /^(?:drive|walk|walking|cycle|cycling|bike|biking|transit|train|bus)\s+(?:time|route|directions)$/i.test(line)
+  ) {
+    return true;
+  }
   if (/^\d+(?:\.\d)?\s*(?:stars?|star rating)?$/i.test(line)) return true;
   if (/^\d+(?:\.\d)?\s*\(\s*[\d,.\s]+(?:reviews?)?\s*\)$/i.test(line)) return true;
   if (/^[\d,.\s]+reviews?$/i.test(line)) return true;
