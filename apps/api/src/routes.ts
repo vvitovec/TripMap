@@ -22,7 +22,7 @@ type PlaceResult = {
   address?: Record<string, string>;
   namedetails?: Record<string, string>;
 };
-type PlaceSource = "nominatim" | "map" | "overpass" | "photon";
+type PlaceSource = "nominatim" | "map" | "mapy" | "overpass" | "photon";
 type SearchPlace = {
   id: string;
   name: string;
@@ -61,6 +61,16 @@ type PhotonFeature = {
     country?: string;
   };
 };
+type MapyEntity = {
+  name: string;
+  label: string;
+  position: { lon: number; lat: number };
+  bbox?: [number, number, number, number];
+  type: string;
+  location?: string;
+  regionalStructure?: Array<{ name: string; type: string; isoCode?: string }>;
+  zip?: string;
+};
 
 const placeSearchCache = new Map<string, { expiresAt: number; places: unknown[] }>();
 const placeReverseCache = new Map<string, { expiresAt: number; place: unknown }>();
@@ -77,6 +87,56 @@ function withSoftTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T)
         if (timeoutId) clearTimeout(timeoutId);
       });
   });
+}
+
+function preferredMapyLanguage(query: string) {
+  return /[áčďéěíňóřšťúůýž]/i.test(query) ? "cs" : "en";
+}
+
+function mapyAddress(regionalStructure: MapyEntity["regionalStructure"], zip?: string) {
+  const address: Record<string, string> = {};
+  regionalStructure?.forEach((item) => {
+    if (item.type === "regional.address") address.house_number ??= item.name;
+    if (item.type === "regional.street") address.road ??= item.name;
+    if (item.type === "regional.municipality_part") address.suburb ??= item.name;
+    if (item.type === "regional.municipality") address.city ??= item.name;
+    if (item.type === "regional.region") address.state ??= item.name;
+    if (item.type === "regional.country") {
+      address.country = item.name;
+      if (item.isoCode) address.country_code = item.isoCode.toLowerCase();
+    }
+  });
+  if (zip) address.postcode = zip;
+  return address;
+}
+
+function mapyCategory(entity: MapyEntity) {
+  const label = entity.label.toLowerCase();
+  if (/\bhotel|accommodation|ubytov/.test(label)) return "hotel";
+  if (/\brestaurant|restaurace|pohostinstv/.test(label)) return "restaurant";
+  if (/\bcafe|kavár/.test(label)) return "cafe";
+  if (/\bcastle|hrad\b/.test(label)) return "castle";
+  if (/\bmuseum|muze/.test(label)) return "museum";
+  if (/\bviewpoint|vyhlídk/.test(label)) return "viewpoint";
+  if (/\bparking|parkovi/.test(label)) return "parking";
+  if (entity.type === "poi") return "place";
+  return entity.type.replace(/^regional\./, "");
+}
+
+function normalizeMapyPlace(entity: MapyEntity, index: number): SearchPlace | null {
+  if (!Number.isFinite(entity.position.lat) || !Number.isFinite(entity.position.lon)) return null;
+  const category = mapyCategory(entity);
+  return {
+    id: `mapy-${entity.type}-${entity.position.lat.toFixed(6)}-${entity.position.lon.toFixed(6)}-${index}`,
+    name: entity.name,
+    label: [entity.name, entity.label, entity.location].filter(Boolean).join(", "),
+    category,
+    type: category === "place" ? entity.label : category,
+    lat: entity.position.lat,
+    lng: entity.position.lon,
+    address: mapyAddress(entity.regionalStructure, entity.zip),
+    source: "mapy"
+  };
 }
 
 const registerSchema = z.object({
@@ -1057,6 +1117,41 @@ async function searchPhotonPlaces(query: string, lat: number, lng: number) {
     .filter((place): place is SearchPlace => Boolean(place));
 }
 
+async function searchMapyPlaces(query: string, anchor?: { lat: number; lng: number }) {
+  if (!env.mapyApiKey) return [];
+
+  async function requestMapy(endpoint: "suggest" | "geocode") {
+    const params = new URLSearchParams({
+      query,
+      lang: preferredMapyLanguage(query),
+      limit: "15"
+    });
+    params.append("type", "regional");
+    params.append("type", "poi");
+    if (anchor) {
+      params.set("preferNear", `${anchor.lng},${anchor.lat}`);
+      params.set("preferNearPrecision", "25000");
+    }
+    const response = await fetch(`https://api.mapy.com/v1/${endpoint}?${params}`, {
+      headers: {
+        "X-Mapy-Api-Key": env.mapyApiKey,
+        "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)"
+      },
+      signal: AbortSignal.timeout(12_000)
+    });
+    if (!response.ok) {
+      throw new Error(`Mapy ${endpoint} failed with status ${response.status}`);
+    }
+    return (await response.json()) as { items?: MapyEntity[] };
+  }
+
+  const suggestData = await requestMapy("suggest");
+  const items = suggestData.items?.length ? suggestData.items : (await requestMapy("geocode")).items;
+  return (items ?? [])
+    .map((entity, index) => normalizeMapyPlace(entity, index))
+    .filter((place): place is SearchPlace => Boolean(place));
+}
+
 function placeDedupeKey(place: SearchPlace) {
   const name = place.name.toLowerCase().replace(/\W+/g, "");
   return `${name}:${place.lat.toFixed(4)}:${place.lng.toFixed(4)}`;
@@ -1129,6 +1224,18 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   const inputAnchor =
     input.lat !== undefined && input.lng !== undefined ? { lat: input.lat, lng: input.lng } : undefined;
   const linkAnchor = linkSearchText && coordinates ? coordinates : undefined;
+  if (env.mapyApiKey) {
+    try {
+      const places = await searchMapyPlaces(queryText, linkAnchor ?? inputAnchor);
+      placeSearchCache.set(cacheKey, {
+        expiresAt: Date.now() + 1000 * 60 * 30,
+        places
+      });
+      return places;
+    } catch {
+      // Fall back to open providers when Mapy is temporarily unavailable.
+    }
+  }
   const naturalSearch = parseNaturalNearbySearch(queryText);
   const naturalAnchor = naturalSearch
     ? await geocodeSearchAnchor(naturalSearch.anchorQuery, linkAnchor ?? inputAnchor).catch(() => null)
@@ -1241,6 +1348,36 @@ async function reversePlace(input: z.infer<typeof placeReverseSchema>) {
   const cacheKey = `${input.lat.toFixed(5)},${input.lng.toFixed(5)}`;
   const cached = placeReverseCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.place;
+
+  if (env.mapyApiKey) {
+    try {
+      const params = new URLSearchParams({
+        lon: String(input.lng),
+        lat: String(input.lat),
+        lang: "en"
+      });
+      const response = await fetch(`https://api.mapy.com/v1/rgeocode?${params}`, {
+        headers: {
+          "X-Mapy-Api-Key": env.mapyApiKey,
+          "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)"
+        },
+        signal: AbortSignal.timeout(10_000)
+      });
+      if (response.ok) {
+        const data = (await response.json()) as { items?: MapyEntity[] };
+        const place = data.items?.[0] ? normalizeMapyPlace(data.items[0], 0) : null;
+        if (place) {
+          placeReverseCache.set(cacheKey, {
+            expiresAt: Date.now() + 1000 * 60 * 30,
+            place
+          });
+          return place;
+        }
+      }
+    } catch {
+      // Fall back to Nominatim reverse geocoding below.
+    }
+  }
 
   await waitForNominatimSlot();
   const params = new URLSearchParams({

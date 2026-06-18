@@ -461,6 +461,20 @@ textarea {
   color: #9a3412;
 }
 
+.place-workflow .destination-mode-tabs,
+.place-workflow .destination-target,
+.place-workflow .search-origin-toggle,
+.place-workflow .search-intent-card,
+.place-workflow .continue-planning-banner,
+.place-workflow .search-suggestions,
+.place-workflow .destination-presets,
+.place-workflow .destination-plan,
+.place-workflow .nearby-groups,
+.place-workflow .quick-search-panel,
+.place-workflow > .destination-list-import:not(.primary-list-import) {
+  display: none;
+}
+
 .destination-target {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

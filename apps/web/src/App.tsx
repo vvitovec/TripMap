@@ -502,6 +502,7 @@ function placeKindLabel(place: PlaceSearchResult) {
 }
 
 function placeSourceLabel(place: PlaceSearchResult) {
+  if (place.source === "mapy") return "Mapy.cz";
   if (place.source === "overpass") return "OSM POI";
   if (place.source === "photon") return "OSM search";
   if (place.source === "map") return "Map pin";
@@ -851,7 +852,7 @@ function isPlaceSearchResult(value: unknown): value is PlaceSearchResult {
     Number.isFinite(place.lat) &&
     typeof place.lng === "number" &&
     Number.isFinite(place.lng) &&
-    ["nominatim", "map", "overpass", "photon"].includes(place.source)
+    ["nominatim", "map", "mapy", "overpass", "photon"].includes(place.source)
   );
 }
 
@@ -3365,15 +3366,13 @@ export function App() {
                 <div>
                   <p className="eyebrow">Add destination</p>
                   <h3>
-                    {destinationMode === "nearby"
-                      ? "Nearby places"
-                      : destinationMode === "coordinates"
-                        ? "Exact pin"
-                        : destinationMode === "list"
-                          ? "Paste itinerary"
-                          : "Find a place"}
+                    {destinationMode === "coordinates"
+                      ? "Drop a pin"
+                      : destinationMode === "list"
+                        ? "Paste itinerary"
+                        : "Search places"}
                   </h3>
-                  <small className="anchor-label">Near {searchAnchorLabel}</small>
+                  <small className="anchor-label">Mapy.cz search · near {searchAnchorLabel}</small>
                 </div>
                 {searchingPlaces ? <Loader2 className="spin" size={18} /> : <Search size={18} />}
               </div>
@@ -3556,7 +3555,7 @@ export function App() {
                       }}
                       onKeyDown={handlePlaceSearchKeyDown}
                       onPaste={handlePlaceSearchPaste}
-                      placeholder="Address, hotel, landmark, map link"
+                      placeholder="Search places, hotels, addresses..."
                     />
                     {placeQuery ? (
                       <button
@@ -3583,7 +3582,7 @@ export function App() {
                       type="button"
                     >
                       {searchingPlaces ? <Loader2 className="spin" size={14} /> : <Search size={14} />}
-                      <span>Search</span>
+                      <span>Find</span>
                     </button>
                   </div>
                   {destinationSearchIntent && placeQuery.trim().length >= 3 ? (
