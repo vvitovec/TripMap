@@ -310,7 +310,7 @@ function extractDestinationContext(line: string) {
     return "";
   });
   text = text.replace(
-    /^\s*(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\s*[:-]\s*/i,
+    /^\s*(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\s*(?::|-|\s)\s*/i,
     (_match, time: string) => {
       notes.push(time.trim().toUpperCase().replace(/\s+/g, " "));
       return "";
@@ -322,6 +322,15 @@ function extractDestinationContext(line: string) {
   });
 
   return { line: text, note: notes.join(" · ") };
+}
+
+function destinationSectionNote(note: string) {
+  return note.split(" · ").find((part) => /^Day \d+$/i.test(part)) ?? "";
+}
+
+function combineDestinationNotes(...notes: string[]) {
+  const parts = notes.flatMap((note) => note.split(" · ")).map((part) => part.trim()).filter(Boolean);
+  return parts.filter((part, index) => parts.indexOf(part) === index).join(" · ");
 }
 
 function cleanDestinationListLine(line: string) {
@@ -351,12 +360,16 @@ function splitDestinationNote(line: string): DestinationListItem {
 function destinationItemsFromText(value: string) {
   const ignored = new Set(["and", "then", "route", "trip", "itinerary", "drive", "road trip"]);
   const items: DestinationListItem[] = [];
+  let activeSectionNote = "";
   for (const segment of destinationTextSegments(value)) {
     const context = extractDestinationContext(segment);
+    const sectionNote = destinationSectionNote(context.note);
+    if (sectionNote) activeSectionNote = sectionNote;
     const line = cleanDestinationListLine(context.line);
+    if (!line && sectionNote) continue;
     if (line.length < 3 || ignored.has(line.toLowerCase())) continue;
     const item = splitDestinationNote(line);
-    item.note = [context.note, item.note].filter(Boolean).join(" · ");
+    item.note = combineDestinationNotes(activeSectionNote, context.note, item.note);
     if (item.query.length < 3 || items.some((existing) => existing.query === item.query)) continue;
     items.push(item);
     if (items.length >= destinationListLimit) break;
