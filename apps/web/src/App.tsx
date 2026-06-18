@@ -2336,6 +2336,18 @@ export function App() {
     return "Main route at the end";
   }
 
+  function destinationPlacementHint() {
+    if (destinationScope === "branch" && destinationBranchParent) {
+      return `Grouped below ${destinationBranchParent.title}`;
+    }
+    if (destinationScope === "main" && routeInsertionAnchor) {
+      return "Later stops shift down";
+    }
+    const lastMainStop = mainStops[mainStops.length - 1];
+    if (lastMainStop) return `After ${lastMainStop.title}`;
+    return "First stop in this trip";
+  }
+
   function queuedAddLabel() {
     const count = routeQueue.length;
     if (destinationScope === "branch" && destinationBranchParent) {
@@ -2370,6 +2382,25 @@ export function App() {
     if (place && queuedPlaceIds.has(place.id)) return "Queued";
     if (destinationScope === "branch" && destinationBranchParent) return "Queue side trip";
     return "Queue";
+  }
+
+  function destinationResultActionLabel(place: PlaceSearchResult, savedStop?: Stop | null) {
+    if (savedStop) return "Saved";
+    if (queuedPlaceIds.has(place.id)) return "Queued";
+    if (destinationScope === "branch" && destinationBranchParent) return "Side trip";
+    if (destinationScope === "main" && routeInsertionAnchor) return "Insert";
+    if (mainStops.length) return "Append";
+    return "Start";
+  }
+
+  function destinationResultActionHint(place: PlaceSearchResult, savedStop?: Stop | null) {
+    if (savedStop) return savedStop.title;
+    if (queuedPlaceIds.has(place.id)) return destinationPlacementLabel();
+    if (destinationScope === "branch" && destinationBranchParent) return destinationBranchParent.title;
+    if (destinationScope === "main" && routeInsertionAnchor) return routeInsertionAnchor.title;
+    const lastMainStop = mainStops[mainStops.length - 1];
+    if (lastMainStop) return lastMainStop.title;
+    return detail?.trip.title ?? "Trip";
   }
 
   function topPlaceRecommendation(place: PlaceSearchResult, savedStop?: Stop | null) {
@@ -2977,6 +3008,19 @@ export function App() {
                 </button>
               </div>
 
+              <div className="destination-target">
+                <span>
+                  {destinationScope === "branch" ? <GitBranch size={15} /> : <Route size={15} />}
+                  <strong>Add target</strong>
+                  <small>{destinationPlacementLabel()}</small>
+                </span>
+                <span>
+                  <Compass size={15} />
+                  <strong>Search area</strong>
+                  <small>{destinationPlacementHint()} · Near {searchAnchorLabel}</small>
+                </span>
+              </div>
+
               {destinationMode !== "coordinates" ? (
                 <>
                   <div className="search-origin-toggle">
@@ -3425,6 +3469,8 @@ export function App() {
                     const distanceLabel = placeDistanceLabel(place);
                     const sourceLabel = placeSourceLabel(place);
                     const savedStop = savedStopForPlace(place);
+                    const actionLabel = destinationResultActionLabel(place, savedStop);
+                    const actionHint = destinationResultActionHint(place, savedStop);
                     return (
                       <article
                         key={place.id}
@@ -3448,6 +3494,7 @@ export function App() {
                               {sourceLabel ? <span>{sourceLabel}</span> : null}
                               {distanceLabel ? <span>{distanceLabel}</span> : null}
                               {areaLabel ? <span>{areaLabel}</span> : null}
+                              <span className="action-meta">{actionLabel} · {actionHint}</span>
                             </span>
                             <small>{placeAddressLabel(place)}</small>
                           </span>
