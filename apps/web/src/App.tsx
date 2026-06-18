@@ -958,6 +958,14 @@ export function App() {
   const mapSearchOriginLabel = mapFocus
     ? `${mapFocus.lat.toFixed(3)}, ${mapFocus.lng.toFixed(3)}`
     : "Move map first";
+  const continuePlanningAnchor = searchOrigin === "route" && routeSearchAnchor ? routeSearchAnchor : null;
+  const continuePlanningChips = useMemo(() => {
+    const queries =
+      currentTrip?.type === "road_trip"
+        ? ["fuel", "ev charging", "restaurant", "parking"]
+        : ["landmark", "restaurant", "cafe", "viewpoint"];
+    return pickPlaceChips(queries);
+  }, [currentTrip?.type]);
   const rankedPlaceResults = useMemo(() => {
     if (!searchAnchor) return placeResults;
     return [...placeResults].sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b));
@@ -3069,7 +3077,7 @@ export function App() {
               </section>
             )}
 
-            <section className="place-workflow" ref={destinationPanelRef}>
+            <section className="place-workflow" ref={destinationPanelRef} data-testid="destination-workflow">
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">Add destination</p>
@@ -3171,6 +3179,7 @@ export function App() {
                     <Search size={17} />
                     <input
                       ref={placeSearchInputRef}
+                      data-testid="place-search-input"
                       value={placeQuery}
                       onChange={(event) => {
                         setActivePresetId(null);
@@ -3202,6 +3211,7 @@ export function App() {
                     ) : null}
                     <button
                       className="search-submit-button"
+                      data-testid="place-search-submit"
                       onClick={() => setPlaceSearchRetryKey((key) => key + 1)}
                       disabled={busy || searchingPlaces || placeQuery.trim().length < 3}
                       type="button"
@@ -3210,11 +3220,31 @@ export function App() {
                       <span>Search</span>
                     </button>
                   </div>
+                  {continuePlanningAnchor ? (
+                    <div className="continue-planning-banner" data-testid="continue-planning-banner">
+                      <span>
+                        <strong>Planning from {continuePlanningAnchor.name}</strong>
+                        <small>Searches start at the last queued destination. Pick a quick next idea or type anything.</small>
+                      </span>
+                      <div>
+                        {continuePlanningChips.map((chip) => (
+                          <button
+                            key={chip.query}
+                            onClick={() => searchNearbyCategory(chip.query)}
+                            type="button"
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {placeSearchError ||
                   searchingPlaces ||
                   (placeQuery.trim().length > 0 && placeQuery.trim().length < 3) ||
                   rankedPlaceResults.length ? (
                     <div
+                      data-testid="place-search-status"
                       className={[
                         "search-run-status",
                         placeSearchError ? "error" : "",
@@ -3562,6 +3592,7 @@ export function App() {
                         <button
                           onClick={() => queuePlaceAndContinue(topVisiblePlace)}
                           disabled={busy || queuedPlaceIds.has(topVisiblePlace.id)}
+                          data-testid="top-place-continue"
                           type="button"
                           title="Queue and keep planning from this place"
                         >
@@ -3673,6 +3704,8 @@ export function App() {
                           className="place-result-continue"
                           onClick={() => queuePlaceAndContinue(place)}
                           disabled={busy || queuedPlaceIds.has(place.id)}
+                          data-testid="place-result-continue"
+                          data-place-id={place.id}
                           type="button"
                           title="Queue and keep planning from this place"
                         >
@@ -3718,7 +3751,7 @@ export function App() {
               ) : null}
 
               {routeQueue.length ? (
-                <div className="route-queue">
+                <div className="route-queue" data-testid="route-queue">
                   <div className="panel-heading compact-heading">
                     <div>
                       <p className="eyebrow">Route queue</p>
@@ -3732,7 +3765,7 @@ export function App() {
                     <span><MapPin size={14} /> {destinationPlacementLabel()}</span>
                     <span><ListFilter size={14} /> {routeQueue.length} queued</span>
                   </div>
-                  <div className="route-queue-next">
+                  <div className="route-queue-next" data-testid="route-queue-next">
                     <span>
                       <strong>Keep planning from {routeSearchAnchor?.name ?? "the route end"}</strong>
                       <small>Searches will use the last queued destination as the next anchor.</small>

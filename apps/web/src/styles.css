@@ -661,6 +661,58 @@ textarea {
   font-weight: 800;
 }
 
+.continue-planning-banner {
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+}
+
+.continue-planning-banner span,
+.continue-planning-banner strong,
+.continue-planning-banner small {
+  min-width: 0;
+  display: block;
+}
+
+.continue-planning-banner strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.continue-planning-banner small {
+  margin-top: 3px;
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.continue-planning-banner div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.continue-planning-banner button {
+  min-height: 28px;
+  border: 1px solid #fdba74;
+  border-radius: 999px;
+  background: #fff;
+  color: #9a3412;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .search-suggestions {
   display: grid;
   gap: 7px;
@@ -2501,6 +2553,20 @@ textarea {
 
   .search-run-status {
     grid-template-columns: 1fr;
+  }
+
+  .continue-planning-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .continue-planning-banner div {
+    justify-content: stretch;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .continue-planning-banner button {
+    width: 100%;
   }
 
   .destination-target {
