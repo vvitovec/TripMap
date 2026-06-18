@@ -86,6 +86,8 @@ const placeChipGroups = [
       { label: "Museums", query: "museum", hint: "Culture" },
       { label: "Parks", query: "park", hint: "Outdoors" },
       { label: "Beaches", query: "beach", hint: "Coast" },
+      { label: "Playgrounds", query: "playground", hint: "Kids" },
+      { label: "Picnic spots", query: "picnic site", hint: "Breaks" },
       { label: "Historic", query: "historic site", hint: "Heritage" },
       { label: "Monuments", query: "monument", hint: "Icons" },
       { label: "Castles", query: "castle", hint: "Historic" },
@@ -104,6 +106,8 @@ const placeChipGroups = [
     chips: [
       { label: "Restaurants", query: "restaurant", hint: "Meals" },
       { label: "Cafes", query: "cafe", hint: "Breaks" },
+      { label: "Bakeries", query: "bakery", hint: "Pastries" },
+      { label: "Ice cream", query: "ice cream", hint: "Treats" },
       { label: "Bars", query: "bar", hint: "Evening" }
     ]
   },
@@ -134,6 +138,7 @@ const placeChipGroups = [
     title: "Essentials",
     chips: [
       { label: "Groceries", query: "grocery", hint: "Supplies" },
+      { label: "Souvenirs", query: "souvenir shop", hint: "Gifts" },
       { label: "Pharmacies", query: "pharmacy", hint: "Health" },
       { label: "Toilets", query: "toilets", hint: "Stops" },
       { label: "Hospitals", query: "hospital", hint: "Emergency" },
@@ -297,6 +302,7 @@ function defaultPlaceNote(place: PlaceSearchResult, query = "") {
   }
   if (/\b(restaurant|food|dinner|lunch|breakfast)\b/.test(text)) return "Meal";
   if (/\b(cafe|coffee)\b/.test(text)) return "Coffee";
+  if (/\b(bakery|pastry|ice cream|gelato)\b/.test(text)) return "Treat";
   if (/\b(bar|pub)\b/.test(text)) return "Drinks";
   if (/\b(fuel|gas)\b/.test(text)) return "Fuel stop";
   if (/\b(charging station|charger|ev charging)\b/.test(text)) return "Charge";
@@ -304,12 +310,15 @@ function defaultPlaceNote(place: PlaceSearchResult, query = "") {
   if (/\b(parking)\b/.test(text)) return "Parking";
   if (/\b(airport|station|bus stop|metro|ferry|transit|rail)\b/.test(text)) return "Transit";
   if (/\b(grocery|supermarket|convenience|marketplace|supplies)\b/.test(text)) return "Supplies";
+  if (/\b(souvenir|gift shop)\b/.test(text)) return "Souvenirs";
   if (/\b(pharmacy|hospital|clinic|doctors)\b/.test(text)) return "Health stop";
   if (/\b(atm|cash)\b/.test(text)) return "Cash";
   if (/\b(spa|wellness|thermal bath)\b/.test(text)) return "Relax";
   if (/\b(swimming pool|pool|water park)\b/.test(text)) return "Swim";
   if (/\b(marina)\b/.test(text)) return "Waterfront";
   if (/\b(viewpoint|photo)\b/.test(text)) return "Photo stop";
+  if (/\b(playground)\b/.test(text)) return "Play";
+  if (/\b(picnic)\b/.test(text)) return "Picnic";
   if (/\b(landmark|tourist attraction|attraction|museum|park|beach|monument|castle|church|cathedral|temple|mosque|synagogue|bridge|trail|waterfall|historic|ruins|zoo|aquarium|theme park)\b/.test(text)) {
     return "Visit";
   }
@@ -525,7 +534,11 @@ function extractDestinationAction(line: string): DestinationListItem {
     { pattern: /^(?:cafe)\s*[:.)-]\s*(.{3,})$/i, note: "Coffee" },
     { pattern: /^(?:bar)\s*[:.)-]\s*(.{3,})$/i, note: "Drinks" },
     { pattern: /^(?:visit|sight|sights|landmark|museum|park|beach|viewpoint|attraction)\s*[:.)-]\s*(.{3,})$/i, note: "Visit" },
+    { pattern: /^(?:playground|play)\s*[:.)-]\s*(.{3,})$/i, note: "Play" },
+    { pattern: /^(?:picnic|picnic\s*spot)\s*[:.)-]\s*(.{3,})$/i, note: "Picnic" },
     { pattern: /^(?:photo|photo\s*stop|scenic|view|lookout)\s*[:.)-]\s*(.{3,})$/i, note: "Photo stop" },
+    { pattern: /^(?:bakery|pastry|ice\s*cream|gelato)\s*[:.)-]\s*(.{3,})$/i, note: "Treat" },
+    { pattern: /^(?:souvenir|souvenirs|gift\s*shop)\s*[:.)-]\s*(.{3,})$/i, note: "Souvenirs" },
     { pattern: /^(?:parking|garage)\s*[:.)-]\s*(.{3,})$/i, note: "Parking" },
     { pattern: /^(?:fuel|gas|petrol|ev\s*charge|ev\s*charging|charger)\s*[:.)-]\s*(.{3,})$/i, note: "Fuel stop" },
     { pattern: /^(?:airport|station|train|bus|metro|ferry|transit)\s*[:.)-]\s*(.{3,})$/i, note: "Transit" },
@@ -992,10 +1005,10 @@ export function App() {
     const queries =
       currentTrip?.type === "road_trip"
         ? routeQueue.length
-          ? ["fuel", "ev charging", "rest area", "restaurant", "parking", "landmark"]
+          ? ["fuel", "ev charging", "rest area", "restaurant", "bakery", "parking"]
           : ["hotel", "fuel", "ev charging", "rest area", "parking", "restaurant"]
         : mainStops.length
-          ? ["landmark", "restaurant", "cafe", "park", "toilets", "pharmacy"]
+          ? ["landmark", "restaurant", "cafe", "ice cream", "playground", "toilets"]
           : ["hotel", "resort", "landmark", "restaurant", "viewpoint", "park"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, mainStops.length, routeQueue.length]);
@@ -1012,7 +1025,7 @@ export function App() {
               { label: "EV charge", category: "ev charging" },
               { label: "Rest stop", category: "rest area" },
               { label: "Food next", category: "restaurant" },
-              { label: "Hotel next", category: "hotel" },
+              { label: "Bakery", category: "bakery" },
               { label: "Parking", category: "parking" }
             ]
           : [
@@ -1029,7 +1042,7 @@ export function App() {
             { label: "Landmarks", category: "landmark" },
             { label: "Viewpoints", category: "viewpoint" },
             { label: "Food nearby", category: "restaurant" },
-            { label: "Parking", category: "parking" }
+            { label: "Ice cream", category: "ice cream" }
           ];
 
     return seeds.map((seed) => ({
@@ -1044,7 +1057,7 @@ export function App() {
       currentTrip?.type === "road_trip"
         ? ["fuel", "ev charging", "rest area"]
         : destinationScope === "branch"
-          ? ["landmark", "cafe", "toilets"]
+          ? ["landmark", "cafe", "ice cream"]
           : ["landmark", "restaurant", "hotel"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, destinationScope]);
