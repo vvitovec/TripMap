@@ -1145,9 +1145,9 @@ export function App() {
   }, [placeSearchAnchorKey]);
   const searchAnchorLabel =
     searchOrigin === "draft" && placeDraft
-      ? "draft place"
+      ? placeDraft.name || "draft place"
       : searchOrigin === "route" && routeSearchAnchor
-      ? "route end"
+      ? routeSearchAnchor.name || "route end"
       : searchOrigin === "map" && mapFocus
         ? "map center"
         : contextSearchAnchorLabel;
