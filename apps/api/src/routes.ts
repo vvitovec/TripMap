@@ -150,6 +150,18 @@ function viewbox(lat: number, lng: number) {
   return `${lng - delta},${lat + delta},${lng + delta},${lat - delta}`;
 }
 
+function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const radiusKm = 6371;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const deltaLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const deltaLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const h =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+  return radiusKm * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
 const nearbyCategoryQueries = new Map([
   ["hotel", "hotel"],
   ["hotels", "hotel"],
@@ -794,7 +806,13 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     searchAnchor && isNearbyCategory
       ? await searchOverpassPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng).catch(() => [])
       : [];
-  const places = mergePlaces(nominatimPlaces, overpassPlaces).slice(0, 24);
+  const mergedPlaces = mergePlaces(nominatimPlaces, overpassPlaces);
+  const places =
+    searchAnchor && isNearbyCategory
+      ? [...mergedPlaces]
+          .sort((a, b) => distanceKm(searchAnchor, a) - distanceKm(searchAnchor, b))
+          .slice(0, 24)
+      : mergedPlaces.slice(0, 24);
 
   placeSearchCache.set(cacheKey, {
     expiresAt: Date.now() + 1000 * 60 * 30,
