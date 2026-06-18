@@ -439,7 +439,7 @@ textarea {
 
 .destination-mode-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -951,6 +951,11 @@ textarea {
   padding: 10px;
 }
 
+.primary-list-import {
+  border-color: #bbebc8;
+  background: #f4fbf6;
+}
+
 .destination-list-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -981,6 +986,10 @@ textarea {
 .destination-list-import textarea {
   min-height: 76px;
   background: #fff;
+}
+
+.primary-list-import textarea {
+  min-height: 128px;
 }
 
 .destination-list-preview {
@@ -2571,6 +2580,10 @@ textarea {
 
   .destination-target {
     grid-template-columns: 1fr;
+  }
+
+  .destination-mode-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .destination-presets,

@@ -32,7 +32,7 @@ import type { Collaborator, Folder, MediaItem, Note, PlaceSearchResult, Stop, Tr
 
 type AuthMode = "login" | "register";
 type DestinationScope = "main" | "branch";
-type DestinationMode = "search" | "nearby" | "coordinates";
+type DestinationMode = "search" | "nearby" | "list" | "coordinates";
 type MemoryScope = "active" | "all";
 type SearchOrigin = "context" | "draft" | "route" | "map";
 type ShareStatus = "idle" | "copied";
@@ -702,6 +702,7 @@ export function App() {
   const destinationPanelRef = useRef<HTMLElement | null>(null);
   const destinationDraftRef = useRef<HTMLDivElement | null>(null);
   const placeSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const destinationListRef = useRef<HTMLTextAreaElement | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -1409,6 +1410,10 @@ export function App() {
     });
   }
 
+  function focusDestinationList() {
+    window.setTimeout(() => destinationListRef.current?.focus(), 0);
+  }
+
   function openDestinationMode(mode: DestinationMode) {
     resetDestinationDraft();
     setPlaceQuery("");
@@ -1416,6 +1421,7 @@ export function App() {
     setDestinationMode(mode);
     setError(null);
     scrollToDestinationPanel();
+    if (mode === "list") focusDestinationList();
   }
 
   async function handleAuth(event: React.FormEvent<HTMLFormElement>) {
@@ -1541,8 +1547,9 @@ export function App() {
     setActivePresetId(null);
     setActivePresetStep(0);
     setPlanningPresetId(null);
-    setDestinationMode("search");
+    setDestinationMode(shouldSearchSingleDestination ? "search" : "list");
     setError(null);
+    if (!shouldSearchSingleDestination) focusDestinationList();
   }
 
   function searchNearbyCategory(query: string) {
@@ -1683,7 +1690,7 @@ export function App() {
 
     setImportingDestinationList(true);
     setDestinationListStatus("");
-    setDestinationMode("search");
+    setDestinationMode("list");
     setActivePresetId(null);
     setActivePresetStep(0);
     setPlanningPresetId(null);
@@ -3081,7 +3088,15 @@ export function App() {
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">Add destination</p>
-                  <h3>{destinationMode === "nearby" ? "Nearby places" : destinationMode === "coordinates" ? "Exact pin" : "Find a place"}</h3>
+                  <h3>
+                    {destinationMode === "nearby"
+                      ? "Nearby places"
+                      : destinationMode === "coordinates"
+                        ? "Exact pin"
+                        : destinationMode === "list"
+                          ? "Paste itinerary"
+                          : "Find a place"}
+                  </h3>
                   <small className="anchor-label">Near {searchAnchorLabel}</small>
                 </div>
                 {searchingPlaces ? <Loader2 className="spin" size={18} /> : <Search size={18} />}
@@ -3090,21 +3105,28 @@ export function App() {
               <div className="destination-mode-tabs">
                 <button
                   className={destinationMode === "search" ? "destination-mode active" : "destination-mode"}
-                  onClick={() => setDestinationMode("search")}
+                  onClick={() => openDestinationMode("search")}
                   type="button"
                 >
                   <Search size={15} /> Find
                 </button>
                 <button
                   className={destinationMode === "nearby" ? "destination-mode active" : "destination-mode"}
-                  onClick={() => setDestinationMode("nearby")}
+                  onClick={() => openDestinationMode("nearby")}
                   type="button"
                 >
                   <Compass size={15} /> Nearby
                 </button>
                 <button
+                  className={destinationMode === "list" ? "destination-mode active" : "destination-mode"}
+                  onClick={() => openDestinationMode("list")}
+                  type="button"
+                >
+                  <ListFilter size={15} /> List
+                </button>
+                <button
                   className={destinationMode === "coordinates" ? "destination-mode active" : "destination-mode"}
-                  onClick={() => setDestinationMode("coordinates")}
+                  onClick={() => openDestinationMode("coordinates")}
                   type="button"
                 >
                   <Crosshair size={15} /> Pin
@@ -3175,6 +3197,74 @@ export function App() {
                       </span>
                     </button>
                   </div>
+                  {destinationMode === "list" ? (
+                    <div className="destination-list-import primary-list-import" data-testid="destination-list-import">
+                      <div className="destination-list-heading">
+                        <span><Route size={14} /> Paste list</span>
+                        <small>
+                          {destinationListQueries.length
+                            ? `${destinationListQueries.length} ready`
+                            : destinationPlacementLabel()}
+                        </small>
+                      </div>
+                      <textarea
+                        ref={destinationListRef}
+                        data-testid="destination-list-input"
+                        value={destinationListText}
+                        onChange={(event) => {
+                          setDestinationListText(event.target.value);
+                          setDestinationListStatus("");
+                        }}
+                        placeholder={`Hotel: Grand Hotel -> Old Town Square\nWinery: Wachau tasting\nDay 2: Prague to Vienna`}
+                        rows={5}
+                      />
+                      {destinationListQueries.length ? (
+                        <div className="destination-list-preview" aria-label="Parsed destinations">
+                          {destinationListItems.slice(0, 6).map((item, index) => (
+                            <span key={`${item.query}-${index}`}>
+                              <small>{index + 1}</small>
+                              <strong>{item.query}</strong>
+                              {item.note ? <em>{item.note}</em> : null}
+                            </span>
+                          ))}
+                          {destinationListQueries.length > 6 ? (
+                            <span>
+                              <small>+</small>
+                              {destinationListQueries.length - 6} more
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="destination-list-actions">
+                        <button
+                          data-testid="destination-list-queue"
+                          onClick={queueDestinationList}
+                          disabled={busy || importingDestinationList || !destinationListQueries.length}
+                          type="button"
+                        >
+                          {importingDestinationList ? <Loader2 className="spin" size={14} /> : <ListFilter size={14} />}
+                          {importingDestinationList
+                            ? "Finding"
+                            : destinationListQueries.length
+                              ? `Find + queue ${destinationListQueries.length}`
+                              : "Find + queue"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDestinationListText("");
+                            setDestinationListStatus("");
+                          }}
+                          disabled={busy || importingDestinationList || !destinationListText.trim()}
+                          type="button"
+                        >
+                          <X size={14} /> Clear
+                        </button>
+                      </div>
+                      {destinationListStatus ? <small className="destination-list-status">{destinationListStatus}</small> : null}
+                    </div>
+                  ) : null}
+                  {destinationMode !== "list" ? (
+                  <>
                   <div className="search-input">
                     <Search size={17} />
                     <input
@@ -3389,7 +3479,7 @@ export function App() {
                       </div>
                     </div>
                   )}
-                  <div className="destination-list-import">
+                  <div className="destination-list-import" data-testid="destination-list-import">
                     <div className="destination-list-heading">
                       <span><Route size={14} /> Paste list</span>
                       <small>
@@ -3399,6 +3489,8 @@ export function App() {
                       </small>
                     </div>
                     <textarea
+                      ref={destinationListRef}
+                      data-testid="destination-list-input"
                       value={destinationListText}
                       onChange={(event) => {
                         setDestinationListText(event.target.value);
@@ -3427,6 +3519,7 @@ export function App() {
                     <div className="destination-list-actions">
                       <button
                         onClick={queueDestinationList}
+                        data-testid="destination-list-queue"
                         disabled={busy || importingDestinationList || !destinationListQueries.length}
                         type="button"
                       >
@@ -3450,6 +3543,8 @@ export function App() {
                     </div>
                     {destinationListStatus ? <small className="destination-list-status">{destinationListStatus}</small> : null}
                   </div>
+                  </>
+                  ) : null}
                 </>
               ) : (
                 <div className="coordinate-entry">
