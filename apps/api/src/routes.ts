@@ -406,6 +406,14 @@ function canUseShorthandCategoryAlias(alias: string) {
   return ["food", "gas", "hiking", "lodging", "sightseeing", "stay", "wellness"].includes(alias);
 }
 
+function trimLeadingSearchWords(query: string) {
+  const words = query.split(" ").filter(Boolean);
+  while (words.length > 1 && categoryIntentStopWords.has(words[0]!.toLowerCase())) {
+    words.shift();
+  }
+  return words.join(" ");
+}
+
 function parseNaturalNearbySearch(query: string) {
   const normalized = query.replace(/\s+/g, " ").trim();
   const lower = normalized.toLowerCase();
@@ -435,17 +443,19 @@ function parseNaturalNearbySearch(query: string) {
   const suffixAliases = [...nearbyCategoryQueries.keys()]
     .filter(canUseShorthandCategoryAlias)
     .sort((a, b) => b.length - a.length);
+  const shorthandQuery = trimLeadingSearchWords(normalized);
+  const shorthandLower = shorthandQuery.toLowerCase();
   for (const alias of suffixAliases) {
     const suffix = ` ${alias}`;
-    if (!lower.endsWith(suffix)) continue;
-    const anchorQuery = normalized.slice(0, normalized.length - alias.length).trim();
+    if (!shorthandLower.endsWith(suffix)) continue;
+    const anchorQuery = shorthandQuery.slice(0, shorthandQuery.length - alias.length).trim();
     if (anchorQuery.length >= 3) return { category: nearbyCategoryQueries.get(alias)!, anchorQuery };
   }
 
   for (const alias of suffixAliases) {
     const prefix = `${alias} `;
-    if (!lower.startsWith(prefix)) continue;
-    const anchorQuery = normalized.slice(alias.length).trim();
+    if (!shorthandLower.startsWith(prefix)) continue;
+    const anchorQuery = shorthandQuery.slice(alias.length).trim();
     if (anchorQuery.length >= 3) return { category: nearbyCategoryQueries.get(alias)!, anchorQuery };
   }
 
