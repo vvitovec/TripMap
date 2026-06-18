@@ -2,22 +2,37 @@ import type { Collaborator, Folder, PlaceSearchResult, Stop, Trip, TripDetail, U
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers =
-    init?.body === undefined || init.body instanceof FormData
-      ? init?.headers
-      : { "Content-Type": "application/json", ...init?.headers };
+type RequestOptions = RequestInit & { timeoutMs?: number };
 
-  const response = await fetch(`${apiBase}${path}`, {
-    credentials: "include",
-    headers,
-    ...init
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed: ${response.status}`);
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const { timeoutMs, ...requestInit } = init ?? {};
+  const headers =
+    requestInit.body === undefined || requestInit.body instanceof FormData
+      ? requestInit.headers
+      : { "Content-Type": "application/json", ...requestInit.headers };
+  const controller = timeoutMs ? new AbortController() : null;
+  const timeoutId = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+
+  try {
+    const response = await fetch(`${apiBase}${path}`, {
+      credentials: "include",
+      headers,
+      ...requestInit,
+      signal: requestInit.signal ?? controller?.signal
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed: ${response.status}`);
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Request timed out. Try again.");
+    }
+    throw error;
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
   }
-  return (await response.json()) as T;
 }
 
 export const api = {
@@ -85,7 +100,7 @@ export const api = {
       params.set("lat", String(near.lat));
       params.set("lng", String(near.lng));
     }
-    return request<{ places: PlaceSearchResult[] }>(`/places/search?${params}`);
+    return request<{ places: PlaceSearchResult[] }>(`/places/search?${params}`, { timeoutMs: 15_000 });
   },
   reversePlace: (lat: number, lng: number) => {
     const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });

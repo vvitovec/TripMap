@@ -1315,6 +1315,8 @@ export function App() {
       return;
     }
     let cancelled = false;
+    setPlaceResults([]);
+    setError(null);
     setSearchingPlaces(true);
     const timer = window.setTimeout(() => {
       api

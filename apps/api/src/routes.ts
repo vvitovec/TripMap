@@ -1032,7 +1032,8 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
       headers: {
         "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
         Referer: "https://trip.vvitovec.com"
-      }
+      },
+      signal: AbortSignal.timeout(8000)
     });
     if (!response.ok) {
       throw new Error(`Place search failed with status ${response.status}`);
@@ -1115,7 +1116,8 @@ async function reversePlace(input: z.infer<typeof placeReverseSchema>) {
     headers: {
       "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
       Referer: "https://trip.vvitovec.com"
-    }
+    },
+    signal: AbortSignal.timeout(8000)
   });
   if (!response.ok) {
     throw new Error(`Reverse geocoding failed with status ${response.status}`);

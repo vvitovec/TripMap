@@ -187,7 +187,7 @@ export function TripMap({
         id: "trip-lines",
         type: "line",
         source: "trips",
-        filter: ["all", ["==", "$type", "LineString"], ["==", ["get", "kind"], "route"]],
+        filter: ["all", ["==", "$type", "LineString"], ["==", "kind", "route"]],
         paint: {
           "line-width": ["case", ["get", "selected"], 5, 3],
           "line-color": ["case", ["get", "selected"], "#f97316", "#38bdf8"],
@@ -198,7 +198,7 @@ export function TripMap({
         id: "trip-branches",
         type: "line",
         source: "trips",
-        filter: ["all", ["==", "$type", "LineString"], ["==", ["get", "kind"], "branch"]],
+        filter: ["all", ["==", "$type", "LineString"], ["==", "kind", "branch"]],
         paint: {
           "line-width": ["case", ["get", "selected"], 4, 2],
           "line-color": ["case", ["get", "selected"], "#22c55e", "#67e8f9"],
@@ -210,7 +210,7 @@ export function TripMap({
         id: "preview-route",
         type: "line",
         source: "trips",
-        filter: ["all", ["==", "$type", "LineString"], ["==", ["get", "kind"], "preview-route"]],
+        filter: ["all", ["==", "$type", "LineString"], ["==", "kind", "preview-route"]],
         paint: {
           "line-width": 4,
           "line-color": "#fde047",
