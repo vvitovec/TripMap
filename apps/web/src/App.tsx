@@ -503,6 +503,7 @@ function placeKindLabel(place: PlaceSearchResult) {
 
 function placeSourceLabel(place: PlaceSearchResult) {
   if (place.source === "overpass") return "OSM POI";
+  if (place.source === "photon") return "OSM search";
   if (place.source === "map") return "Map pin";
   return null;
 }
@@ -850,7 +851,7 @@ function isPlaceSearchResult(value: unknown): value is PlaceSearchResult {
     Number.isFinite(place.lat) &&
     typeof place.lng === "number" &&
     Number.isFinite(place.lng) &&
-    ["nominatim", "map", "overpass"].includes(place.source)
+    ["nominatim", "map", "overpass", "photon"].includes(place.source)
   );
 }
 

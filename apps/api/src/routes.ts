@@ -22,7 +22,7 @@ type PlaceResult = {
   address?: Record<string, string>;
   namedetails?: Record<string, string>;
 };
-type PlaceSource = "nominatim" | "map" | "overpass";
+type PlaceSource = "nominatim" | "map" | "overpass" | "photon";
 type SearchPlace = {
   id: string;
   name: string;
@@ -44,6 +44,23 @@ type OverpassElement = {
   tags?: Record<string, string>;
 };
 type OverpassTagFilter = { key: string; values?: string[] };
+type PhotonFeature = {
+  geometry?: { coordinates?: [number, number] };
+  properties?: {
+    osm_id?: number;
+    osm_type?: string;
+    osm_key?: string;
+    osm_value?: string;
+    name?: string;
+    housenumber?: string;
+    street?: string;
+    city?: string;
+    district?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+  };
+};
 
 const placeSearchCache = new Map<string, { expiresAt: number; places: unknown[] }>();
 const placeReverseCache = new Map<string, { expiresAt: number; place: unknown }>();
@@ -976,6 +993,70 @@ async function searchOverpassPlaces(query: string, lat: number, lng: number) {
     .filter((place): place is SearchPlace => Boolean(place));
 }
 
+function normalizePhotonPlace(feature: PhotonFeature, query: string): SearchPlace | null {
+  const [rawLng, rawLat] = feature.geometry?.coordinates ?? [];
+  const properties = feature.properties ?? {};
+  const name = properties.name?.trim();
+  if (!name || !Number.isFinite(rawLat) || !Number.isFinite(rawLng)) return null;
+  const lat = rawLat as number;
+  const lng = rawLng as number;
+  const address = {
+    house_number: properties.housenumber,
+    road: properties.street,
+    city: properties.city,
+    suburb: properties.district,
+    state: properties.state,
+    postcode: properties.postcode,
+    country: properties.country
+  };
+  const label = [
+    name,
+    [properties.housenumber, properties.street].filter(Boolean).join(" "),
+    properties.city,
+    properties.state,
+    properties.country
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return {
+    id: `photon-${properties.osm_type ?? "place"}-${properties.osm_id ?? `${lat.toFixed(5)}-${lng.toFixed(5)}`}`,
+    name,
+    label,
+    category: properties.osm_key ?? query,
+    type: properties.osm_value ?? query,
+    lat,
+    lng,
+    address: Object.fromEntries(
+      Object.entries(address).filter((entry): entry is [string, string] => Boolean(entry[1]))
+    ),
+    source: "photon" as const
+  };
+}
+
+async function searchPhotonPlaces(query: string, lat: number, lng: number) {
+  const params = new URLSearchParams({
+    q: query,
+    lat: String(lat),
+    lon: String(lng),
+    limit: "16",
+    lang: "en"
+  });
+  const response = await fetch(`https://photon.komoot.io/api/?${params}`, {
+    headers: {
+      "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
+      Referer: "https://trip.vvitovec.com"
+    },
+    signal: AbortSignal.timeout(12_000)
+  });
+  if (!response.ok) {
+    throw new Error(`Photon search failed with status ${response.status}`);
+  }
+  const data = (await response.json()) as { features?: PhotonFeature[] };
+  return (data.features ?? [])
+    .map((feature) => normalizePhotonPlace(feature, query))
+    .filter((place): place is SearchPlace => Boolean(place));
+}
+
 function placeDedupeKey(place: SearchPlace) {
   const name = place.name.toLowerCase().replace(/\W+/g, "");
   return `${name}:${place.lat.toFixed(4)}:${place.lng.toFixed(4)}`;
@@ -1112,14 +1193,15 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     return normalizeNominatimPlaces(data);
   }
 
-  const [nominatimPlaces, overpassPlaces] =
+  const [nominatimPlaces, overpassPlaces, photonPlaces] =
     searchAnchor && isNearbyCategory
       ? await Promise.all([
           withSoftTimeout(searchNominatimPlaces(), 11_000, [] as SearchPlace[]),
-          withSoftTimeout(searchOverpassPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng), 15_000, [])
+          withSoftTimeout(searchOverpassPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng), 15_000, []),
+          withSoftTimeout(searchPhotonPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng), 12_000, [])
         ])
-      : [await searchNominatimPlaces(), []];
-  const mergedPlaces = mergePlaces(nominatimPlaces, overpassPlaces);
+      : [await searchNominatimPlaces(), [], []];
+  const mergedPlaces = mergePlaces(nominatimPlaces, [...overpassPlaces, ...photonPlaces]);
   const nearbyRadiusKm = nearbySearchRadiusMeters(normalizedQuery) / 1000;
   const places =
     searchAnchor && isNearbyCategory

@@ -64,7 +64,7 @@ export type PlaceSearchResult = {
   lng: number;
   importance?: number;
   address?: Record<string, string>;
-  source: "nominatim" | "map" | "overpass";
+  source: "nominatim" | "map" | "overpass" | "photon";
 };
 
 export type Trip = {
