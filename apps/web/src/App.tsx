@@ -564,9 +564,13 @@ function extractDestinationAction(line: string): DestinationListItem {
     { pattern: /^(?:visit|sight|sights|landmark|museum|park|beach|viewpoint|attraction)\s*[:.)-]\s*(.{3,})$/i, note: "Visit" },
     { pattern: /^(?:playground|play)\s*[:.)-]\s*(.{3,})$/i, note: "Play" },
     { pattern: /^(?:picnic|picnic\s*spot)\s*[:.)-]\s*(.{3,})$/i, note: "Picnic" },
+    { pattern: /^(?:lake|peak|mountain|ski|ski\s*area|ski\s*resort|outdoor)\s*[:.)-]\s*(.{3,})$/i, note: "Outdoor stop" },
     { pattern: /^(?:photo|photo\s*stop|scenic|view|lookout)\s*[:.)-]\s*(.{3,})$/i, note: "Photo stop" },
     { pattern: /^(?:bakery|pastry|ice\s*cream|gelato)\s*[:.)-]\s*(.{3,})$/i, note: "Treat" },
+    { pattern: /^(?:winery|vineyard|wine\s*tasting)\s*[:.)-]\s*(.{3,})$/i, note: "Wine tasting" },
+    { pattern: /^(?:shopping|mall|shopping\s*mall)\s*[:.)-]\s*(.{3,})$/i, note: "Shopping" },
     { pattern: /^(?:souvenir|souvenirs|gift\s*shop)\s*[:.)-]\s*(.{3,})$/i, note: "Souvenirs" },
+    { pattern: /^(?:info|information|tourist\s*info|tourist\s*information|visitor\s*cent(?:er|re))\s*[:.)-]\s*(.{3,})$/i, note: "Visitor info" },
     { pattern: /^(?:parking|garage)\s*[:.)-]\s*(.{3,})$/i, note: "Parking" },
     { pattern: /^(?:fuel|gas|petrol|ev\s*charge|ev\s*charging|charger)\s*[:.)-]\s*(.{3,})$/i, note: "Fuel stop" },
     { pattern: /^(?:airport|station|train|bus|metro|ferry|transit)\s*[:.)-]\s*(.{3,})$/i, note: "Transit" },
@@ -599,7 +603,7 @@ function splitDestinationNote(line: string): DestinationListItem {
   const note = match[2]?.trim() ?? "";
   const noteLooksIntentional =
     /^[a-z]/.test(note) ||
-    /\b(?:arrive|arrival|book|booking|breakfast|check|coffee|depart|departure|dinner|flight|hotel|lunch|note|optional|overnight|photo|reservation|stay|stop|ticket|train|visit)\b/i.test(note);
+    /\b(?:arrive|arrival|book|booking|breakfast|check|coffee|depart|departure|dinner|flight|hotel|info|lunch|note|optional|outdoor|overnight|photo|reservation|shopping|stay|stop|ticket|train|visit|wine)\b/i.test(note);
   if (!query || !note || !noteLooksIntentional) return { query: line, note: "" };
   return { query, note };
 }
@@ -3284,7 +3288,7 @@ export function App() {
                         setDestinationListText(event.target.value);
                         setDestinationListStatus("");
                       }}
-                      placeholder={`Grand Hotel -> Old Town Square\nDay 2: Prague to Vienna\nhttps://maps.app.goo.gl/...`}
+                      placeholder={`Hotel: Grand Hotel -> Old Town Square\nWinery: Wachau tasting\nDay 2: Prague to Vienna`}
                       rows={3}
                     />
                     {destinationListQueries.length ? (
