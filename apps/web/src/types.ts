@@ -4,21 +4,6 @@ export type User = {
   name: string;
 };
 
-export type Folder = {
-  id: string;
-  title: string;
-  color: string;
-};
-
-export type Collaborator = {
-  trip_id: string;
-  user_id: string;
-  role: "viewer" | "editor";
-  email: string;
-  name: string;
-  created_at: string;
-};
-
 export type Stop = {
   id: string;
   trip_id: string;
@@ -47,13 +32,6 @@ export type MediaItem = {
   longitude?: number | null;
 };
 
-export type Note = {
-  id: string;
-  body: string;
-  stop_id?: string | null;
-  created_at: string;
-};
-
 export type PlaceSearchResult = {
   id: string;
   name: string;
@@ -67,21 +45,21 @@ export type PlaceSearchResult = {
   source: "nominatim" | "map" | "mapy" | "overpass" | "photon";
 };
 
+export type TripType = "one_destination" | "road_trip";
+
 export type Trip = {
   id: string;
   title: string;
   description: string;
-  type: "one_destination" | "road_trip";
-  folder_id?: string | null;
-  folder_title?: string | null;
+  type: TripType;
   starts_at?: string | null;
   ends_at?: string | null;
+  cover_media_id?: string | null;
   stops: Stop[];
 };
 
 export type TripDetail = {
   trip: Trip;
   stops: Stop[];
-  notes: Note[];
   media: MediaItem[];
 };
