@@ -386,6 +386,31 @@ function nearbyCategoryIntent(query: string) {
   return nearbyCategoryQueries.get(meaningfulQuery) ?? null;
 }
 
+function parseNaturalNearbySearch(query: string) {
+  const normalized = query.replace(/\s+/g, " ").trim();
+  const lower = normalized.toLowerCase();
+  const separators = [" close to ", " next to ", " nearby ", " around ", " near ", " in ", " at "];
+
+  for (const separator of separators) {
+    const index = lower.indexOf(separator);
+    if (index <= 0) continue;
+    const categoryText = normalized.slice(0, index).trim();
+    const anchorQuery = normalized.slice(index + separator.length).trim();
+    const category = nearbyCategoryIntent(categoryText);
+    if (category && anchorQuery.length >= 3) return { category, anchorQuery };
+  }
+
+  const suffixAliases = [...nearbyCategoryQueries.keys()].sort((a, b) => b.length - a.length);
+  for (const alias of suffixAliases) {
+    const suffix = ` ${alias}`;
+    if (!lower.endsWith(suffix)) continue;
+    const anchorQuery = normalized.slice(0, normalized.length - alias.length).trim();
+    if (anchorQuery.length >= 3) return { category: nearbyCategoryQueries.get(alias)!, anchorQuery };
+  }
+
+  return null;
+}
+
 function safeDecode(value: string) {
   const withSpaces = value.replace(/\+/g, " ");
   try {
@@ -628,6 +653,38 @@ function mergePlaces(primary: SearchPlace[], secondary: SearchPlace[]) {
   return merged;
 }
 
+async function geocodeSearchAnchor(query: string, reference?: { lat: number; lng: number }) {
+  await waitForNominatimSlot();
+  const params = new URLSearchParams({
+    q: query,
+    format: "jsonv2",
+    addressdetails: "1",
+    namedetails: "1",
+    extratags: "1",
+    limit: "1",
+    "accept-language": "en"
+  });
+  if (reference) {
+    params.set("viewbox", viewbox(reference.lat, reference.lng));
+    params.set("bounded", "0");
+  }
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+    headers: {
+      "User-Agent": "TripMap/0.1 (https://trip.vvitovec.com; contact: vvitovec27@gmail.com)",
+      Referer: "https://trip.vvitovec.com"
+    },
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!response.ok) {
+    throw new Error(`Anchor search failed with status ${response.status}`);
+  }
+  const data = (await response.json()) as PlaceResult[];
+  const place = data
+    .map((result) => normalizePlace(result))
+    .find((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
+  return place ?? null;
+}
+
 async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   const cacheKey = JSON.stringify(input).toLowerCase();
   const cached = placeSearchCache.get(cacheKey);
@@ -647,9 +704,16 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
 
   const linkSearchText = mapLinkSearchText(resolvedQuery);
   const queryText = linkSearchText ?? resolvedQuery.trim();
-  const categoryIntent = nearbyCategoryIntent(queryText);
+  const inputAnchor =
+    input.lat !== undefined && input.lng !== undefined ? { lat: input.lat, lng: input.lng } : undefined;
+  const naturalSearch = parseNaturalNearbySearch(queryText);
+  const naturalAnchor = naturalSearch
+    ? await geocodeSearchAnchor(naturalSearch.anchorQuery, inputAnchor).catch(() => null)
+    : null;
+  const categoryIntent = naturalAnchor && naturalSearch ? naturalSearch.category : nearbyCategoryIntent(queryText);
   const normalizedQuery = categoryIntent ?? queryText;
-  const hasAnchor = input.lat !== undefined && input.lng !== undefined;
+  const searchAnchor = naturalAnchor ?? inputAnchor;
+  const hasAnchor = Boolean(searchAnchor);
   const isNearbyCategory = Boolean(categoryIntent);
 
   async function fetchSearch(bounded: boolean) {
@@ -663,8 +727,8 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
       limit: "8",
       "accept-language": "en"
     });
-    if (hasAnchor) {
-      params.set("viewbox", viewbox(input.lat!, input.lng!));
+    if (searchAnchor) {
+      params.set("viewbox", viewbox(searchAnchor.lat, searchAnchor.lng));
       params.set("bounded", bounded ? "1" : "0");
     }
     const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
@@ -698,8 +762,8 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     }))
     .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
   const overpassPlaces =
-    hasAnchor && isNearbyCategory
-      ? await searchOverpassPlaces(normalizedQuery, input.lat!, input.lng!).catch(() => [])
+    searchAnchor && isNearbyCategory
+      ? await searchOverpassPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng).catch(() => [])
       : [];
   const places = mergePlaces(nominatimPlaces, overpassPlaces).slice(0, 24);
 
