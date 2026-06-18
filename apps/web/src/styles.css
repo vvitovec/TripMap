@@ -443,6 +443,10 @@ textarea {
   gap: 8px;
 }
 
+.simple-destination-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .destination-mode {
   min-height: 38px;
   border: 1px solid #d6dde5;
@@ -461,7 +465,6 @@ textarea {
   color: #9a3412;
 }
 
-.place-workflow .destination-mode-tabs,
 .place-workflow .destination-target,
 .place-workflow .search-origin-toggle,
 .place-workflow .search-intent-card,
@@ -1328,6 +1331,37 @@ textarea {
 .coordinate-entry {
   display: grid;
   gap: 8px;
+}
+
+.pin-drop-panel {
+  border: 1px dashed #b8c4cf;
+  border-radius: 8px;
+  background: #f8faf8;
+  color: #35536d;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.pin-drop-panel strong,
+.pin-drop-panel small {
+  display: block;
+}
+
+.pin-drop-panel strong {
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.pin-drop-panel small {
+  color: #667085;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.map-canvas.pin-mode {
+  cursor: crosshair;
 }
 
 .coordinate-row {

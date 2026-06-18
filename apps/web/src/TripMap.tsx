@@ -9,10 +9,12 @@ type Props = {
   previewPlace?: PlaceSearchResult | null;
   previewPlaces?: PlaceSearchResult[];
   previewRoute?: Array<{ lat: number; lng: number }>;
+  pinMode?: boolean;
   onSelectTrip: (id: string) => void;
   onSelectStop?: (id: string) => void;
   onSelectPreviewPlace?: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
+  onPinMove?: (lat: number, lng: number) => void;
   onViewChange?: (center: { lat: number; lng: number }) => void;
 };
 
@@ -23,40 +25,47 @@ export function TripMap({
   previewPlace,
   previewPlaces,
   previewRoute,
+  pinMode = false,
   onSelectTrip,
   onSelectStop,
   onSelectPreviewPlace,
   onMapClick,
+  onPinMove,
   onViewChange
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const draftPinMarkerRef = useRef<maplibregl.Marker | null>(null);
   const tripsSourceReadyRef = useRef(false);
   const callbacksRef = useRef({
     onMapClick,
+    onPinMove,
     onSelectPreviewPlace,
     onSelectStop,
     onSelectTrip,
-    onViewChange
+    onViewChange,
+    pinMode
   });
   const previewRoutePoints = previewRoute ?? [];
 
   useEffect(() => {
     callbacksRef.current = {
       onMapClick,
+      onPinMove,
       onSelectPreviewPlace,
       onSelectStop,
       onSelectTrip,
-      onViewChange
+      onViewChange,
+      pinMode
     };
-  }, [onMapClick, onSelectPreviewPlace, onSelectStop, onSelectTrip, onViewChange]);
+  }, [onMapClick, onPinMove, onSelectPreviewPlace, onSelectStop, onSelectTrip, onViewChange, pinMode]);
 
   const effectivePreviewPlaces = useMemo(() => {
     const previews = new Map<string, PlaceSearchResult>();
     previewPlaces?.forEach((place) => previews.set(place.id, place));
-    if (previewPlace) previews.set(previewPlace.id, previewPlace);
+    if (previewPlace && !pinMode) previews.set(previewPlace.id, previewPlace);
     return [...previews.values()];
-  }, [previewPlace, previewPlaces]);
+  }, [pinMode, previewPlace, previewPlaces]);
 
   const geojson = useMemo(() => {
     const pointFeatures = trips.flatMap((trip) =>
@@ -286,13 +295,17 @@ export function TripMap({
 
     map.on("click", (event) => {
       const features = map.queryRenderedFeatures(event.point, { layers: ["trip-points"] });
-      if (features.length === 0) callbacksRef.current.onMapClick(event.lngLat.lat, event.lngLat.lng);
+      if (features.length === 0 && callbacksRef.current.pinMode) {
+        callbacksRef.current.onMapClick(event.lngLat.lat, event.lngLat.lng);
+      }
     });
     map.on("moveend", reportCenter);
 
     mapRef.current = map;
     return () => {
       tripsSourceReadyRef.current = false;
+      draftPinMarkerRef.current?.remove();
+      draftPinMarkerRef.current = null;
       map.off("load", handleLoad);
       mapRef.current = null;
       map.remove();
@@ -305,6 +318,32 @@ export function TripMap({
     const source = map.getSource("trips") as maplibregl.GeoJSONSource | undefined;
     source?.setData(geojson);
   }, [geojson]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !pinMode || !previewPlace) {
+      draftPinMarkerRef.current?.remove();
+      draftPinMarkerRef.current = null;
+      return;
+    }
+    if (!draftPinMarkerRef.current) {
+      const marker = new maplibregl.Marker({ color: "#22c55e", draggable: true })
+        .setLngLat([previewPlace.lng, previewPlace.lat])
+        .addTo(map);
+      marker.on("dragend", () => {
+        const point = marker.getLngLat();
+        callbacksRef.current.onPinMove?.(point.lat, point.lng);
+      });
+      draftPinMarkerRef.current = marker;
+    }
+    draftPinMarkerRef.current.setLngLat([previewPlace.lng, previewPlace.lat]);
+  }, [pinMode, previewPlace?.id, previewPlace?.lat, previewPlace?.lng]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.getCanvas().style.cursor = pinMode ? "crosshair" : "";
+  }, [pinMode]);
 
   useEffect(() => {
     if (previewRoutePoints.length > 1 && mapRef.current) {
@@ -335,5 +374,5 @@ export function TripMap({
     mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 900 });
   }, [effectivePreviewPlaces, previewRoutePoints, selectedTripId, trips]);
 
-  return <div ref={containerRef} className="map-canvas" />;
+  return <div ref={containerRef} className={pinMode ? "map-canvas pin-mode" : "map-canvas"} />;
 }

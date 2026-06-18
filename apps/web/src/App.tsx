@@ -1736,8 +1736,11 @@ export function App() {
     }
   }
 
-  function selectPlace(place: PlaceSearchResult, options: { revealDraft?: boolean } = { revealDraft: true }) {
-    rememberRecentPlace(place);
+  function selectPlace(
+    place: PlaceSearchResult,
+    options: { remember?: boolean; revealDraft?: boolean } = { remember: true, revealDraft: true }
+  ) {
+    if (options.remember !== false) rememberRecentPlace(place);
     setPlaceDraft(place);
     setDraftTitle(place.name);
     setDraftNote(defaultPlaceNote(place, placeQuery));
@@ -2108,25 +2111,35 @@ export function App() {
     );
   }
 
-  async function previewMapPin(lat: number, lng: number) {
+  async function previewMapPin(
+    lat: number,
+    lng: number,
+    options: { preserveDraftTitle?: boolean; revealDraft?: boolean } = {}
+  ) {
     if (!selectedTripId) return;
+    const previousTitle = options.preserveDraftTitle ? draftTitle : "";
     setDestinationMode("coordinates");
     setBusy(true);
     try {
       const { place } = await api.reversePlace(lat, lng);
-      selectPlace(place);
+      selectPlace(place, { remember: false, revealDraft: options.revealDraft ?? true });
+      if (previousTitle) setDraftTitle(previousTitle);
     } catch {
       const label = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-      selectPlace({
-        id: `map-${lat}-${lng}`,
-        name: "Dropped pin",
-        label,
-        category: "map pin",
-        type: "pin",
-        lat,
-        lng,
-        source: "map"
-      });
+      selectPlace(
+        {
+          id: `map-${lat}-${lng}`,
+          name: "Dropped pin",
+          label,
+          category: "map pin",
+          type: "pin",
+          lat,
+          lng,
+          source: "map"
+        },
+        { remember: false, revealDraft: options.revealDraft ?? true }
+      );
+      if (previousTitle) setDraftTitle(previousTitle);
     } finally {
       setBusy(false);
     }
@@ -3135,10 +3148,21 @@ export function App() {
           previewPlace={placeDraft}
           previewPlaces={mapPreviewPlaces}
           previewRoute={mapPreviewRoute}
+          pinMode={destinationMode === "coordinates"}
           onSelectTrip={selectTripId}
           onSelectStop={selectStopId}
           onSelectPreviewPlace={selectPreviewPlaceFromMap}
           onMapClick={previewMapPin}
+          onPinMove={(lat, lng) => {
+            const hasCustomTitle = Boolean(
+              placeDraft &&
+                draftTitle.trim() &&
+                draftTitle.trim().toLowerCase() !== placeDraft.name.trim().toLowerCase()
+            );
+            previewMapPin(lat, lng, { preserveDraftTitle: hasCustomTitle, revealDraft: false }).catch((error) =>
+              setError(error instanceof Error ? error.message : String(error))
+            );
+          }}
           onViewChange={setMapFocus}
         />
       </section>
@@ -3380,34 +3404,20 @@ export function App() {
                 {searchingPlaces ? <Loader2 className="spin" size={18} /> : <Search size={18} />}
               </div>
 
-              <div className="destination-mode-tabs">
+              <div className="destination-mode-tabs simple-destination-tabs">
                 <button
-                  className={destinationMode === "search" ? "destination-mode active" : "destination-mode"}
+                  className={destinationMode !== "coordinates" ? "destination-mode active" : "destination-mode"}
                   onClick={() => openDestinationMode("search")}
                   type="button"
                 >
-                  <Search size={15} /> Find
-                </button>
-                <button
-                  className={destinationMode === "nearby" ? "destination-mode active" : "destination-mode"}
-                  onClick={() => openDestinationMode("nearby")}
-                  type="button"
-                >
-                  <Compass size={15} /> Nearby
-                </button>
-                <button
-                  className={destinationMode === "list" ? "destination-mode active" : "destination-mode"}
-                  onClick={() => openDestinationMode("list")}
-                  type="button"
-                >
-                  <ListFilter size={15} /> List
+                  <Search size={15} /> Search
                 </button>
                 <button
                   className={destinationMode === "coordinates" ? "destination-mode active" : "destination-mode"}
                   onClick={() => openDestinationMode("coordinates")}
                   type="button"
                 >
-                  <Crosshair size={15} /> Pin
+                  <MapPin size={15} /> Pin
                 </button>
               </div>
 
@@ -3834,37 +3844,16 @@ export function App() {
                   ) : null}
                 </>
               ) : (
-                <div className="coordinate-entry">
-                  <button
-                    className="wide-button subtle map-center-button"
-                    onClick={useMapCenterPin}
-                    disabled={!mapFocus || busy}
-                    type="button"
-                  >
-                    <Crosshair size={16} /> Use map center as pin
-                  </button>
-                  <input
-                    value={manualLabel}
-                    onChange={(event) => setManualLabel(event.target.value)}
-                    placeholder="Place name"
-                  />
-                  <div className="coordinate-row">
-                    <input
-                      value={manualLat}
-                      onChange={(event) => setManualLat(event.target.value)}
-                      inputMode="decimal"
-                      placeholder="Latitude"
-                    />
-                    <input
-                      value={manualLng}
-                      onChange={(event) => setManualLng(event.target.value)}
-                      inputMode="decimal"
-                      placeholder="Longitude"
-                    />
-                  </div>
-                  <button className="wide-button subtle" onClick={useManualCoordinates} type="button">
-                    <Crosshair size={16} /> Use coordinates
-                  </button>
+                <div className="pin-drop-panel" data-testid="pin-drop-panel">
+                  <MapPin size={17} />
+                  <span>
+                    <strong>{placeDraft ? "Pin placed" : "Click the map to place a pin"}</strong>
+                    <small>
+                      {placeDraft
+                        ? "Drag the green pin on the map to adjust it."
+                        : "Name it below after it lands."}
+                    </small>
+                  </span>
                 </div>
               )}
 
