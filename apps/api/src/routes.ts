@@ -49,6 +49,19 @@ const placeSearchCache = new Map<string, { expiresAt: number; places: unknown[] 
 const placeReverseCache = new Map<string, { expiresAt: number; place: unknown }>();
 let lastNominatimSearchAt = 0;
 
+function withSoftTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  return new Promise<T>((resolve) => {
+    timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+    promise
+      .then(resolve)
+      .catch(() => resolve(fallback))
+      .finally(() => {
+        if (timeoutId) clearTimeout(timeoutId);
+      });
+  });
+}
+
 const registerSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(80),
@@ -845,7 +858,7 @@ function overpassQuery(filters: OverpassTagFilter[], lat: number, lng: number) {
       ];
     })
     .join("");
-  return `[out:json][timeout:8];(${clauses});out center tags 24;`;
+  return `[out:json][timeout:6];(${clauses});out center tags 24;`;
 }
 
 function overpassAddress(tags: Record<string, string>) {
@@ -918,7 +931,7 @@ async function searchOverpassPlaces(query: string, lat: number, lng: number) {
       Referer: "https://trip.vvitovec.com"
     },
     body: new URLSearchParams({ data: overpassQuery(filters, lat, lng) }),
-    signal: AbortSignal.timeout(10_000)
+    signal: AbortSignal.timeout(8000)
   });
   if (!response.ok) {
     throw new Error(`Overpass search failed with status ${response.status}`);
@@ -1041,28 +1054,37 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     return (await response.json()) as PlaceResult[];
   }
 
-  let data = await fetchSearch(hasAnchor && isNearbyCategory);
-  if (!data.length && hasAnchor && isNearbyCategory) {
-    data = await fetchSearch(false);
+  const normalizeNominatimPlaces = (data: PlaceResult[]): SearchPlace[] =>
+    data
+      .map((result) => ({
+        id: `${result.osm_type ?? "place"}-${result.osm_id ?? result.place_id}`,
+        name: placeName(result),
+        label: result.display_name,
+        category: placeCategory(result),
+        type: result.type ?? result.class ?? "place",
+        lat: Number(result.lat),
+        lng: Number(result.lon),
+        importance: result.importance,
+        address: result.address ?? {},
+        source: "nominatim" as const
+      }))
+      .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
+
+  async function searchNominatimPlaces() {
+    let data = await fetchSearch(hasAnchor && isNearbyCategory);
+    if (!data.length && hasAnchor && isNearbyCategory) {
+      data = await fetchSearch(false);
+    }
+    return normalizeNominatimPlaces(data);
   }
-  const nominatimPlaces: SearchPlace[] = data
-    .map((result) => ({
-      id: `${result.osm_type ?? "place"}-${result.osm_id ?? result.place_id}`,
-      name: placeName(result),
-      label: result.display_name,
-      category: placeCategory(result),
-      type: result.type ?? result.class ?? "place",
-      lat: Number(result.lat),
-      lng: Number(result.lon),
-      importance: result.importance,
-      address: result.address ?? {},
-      source: "nominatim" as const
-    }))
-    .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
-  const overpassPlaces =
+
+  const [nominatimPlaces, overpassPlaces] =
     searchAnchor && isNearbyCategory
-      ? await searchOverpassPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng).catch(() => [])
-      : [];
+      ? await Promise.all([
+          withSoftTimeout(searchNominatimPlaces(), 6500, [] as SearchPlace[]),
+          withSoftTimeout(searchOverpassPlaces(normalizedQuery, searchAnchor.lat, searchAnchor.lng), 9000, [])
+        ])
+      : [await searchNominatimPlaces(), []];
   const mergedPlaces = mergePlaces(nominatimPlaces, overpassPlaces);
   const places =
     searchAnchor && isNearbyCategory

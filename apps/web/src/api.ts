@@ -100,7 +100,7 @@ export const api = {
       params.set("lat", String(near.lat));
       params.set("lng", String(near.lng));
     }
-    return request<{ places: PlaceSearchResult[] }>(`/places/search?${params}`, { timeoutMs: 15_000 });
+    return request<{ places: PlaceSearchResult[] }>(`/places/search?${params}`, { timeoutMs: 22_000 });
   },
   reversePlace: (lat: number, lng: number) => {
     const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
