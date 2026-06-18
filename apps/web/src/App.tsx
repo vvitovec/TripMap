@@ -103,9 +103,15 @@ const placeChipGroups = [
     title: "Move",
     chips: [
       { label: "Fuel", query: "fuel", hint: "Road trip" },
+      { label: "EV chargers", query: "ev charging", hint: "Charge" },
+      { label: "Rest areas", query: "rest area", hint: "Breaks" },
       { label: "Parking", query: "parking", hint: "Arrivals" },
+      { label: "Car rentals", query: "car rental", hint: "Rentals" },
       { label: "Airports", query: "airport", hint: "Flights" },
-      { label: "Stations", query: "train station", hint: "Transit" }
+      { label: "Stations", query: "train station", hint: "Rail" },
+      { label: "Bus stops", query: "bus stop", hint: "Transit" },
+      { label: "Metro", query: "metro station", hint: "City" },
+      { label: "Ferries", query: "ferry terminal", hint: "Water" }
     ]
   },
   {
@@ -113,6 +119,9 @@ const placeChipGroups = [
     chips: [
       { label: "Groceries", query: "grocery", hint: "Supplies" },
       { label: "Pharmacies", query: "pharmacy", hint: "Health" },
+      { label: "Toilets", query: "toilets", hint: "Stops" },
+      { label: "Hospitals", query: "hospital", hint: "Emergency" },
+      { label: "Clinics", query: "clinic", hint: "Care" },
       { label: "ATMs", query: "atm", hint: "Cash" }
     ]
   }
@@ -156,11 +165,21 @@ const destinationPresets: DestinationPreset[] = [
   {
     id: "road-leg",
     title: "Road leg",
-    hint: "Fuel, park, see",
+    hint: "Fuel, rest, food",
     steps: [
       { label: "Fuel", query: "fuel" },
+      { label: "Rest", query: "rest area" },
+      { label: "Food", query: "restaurant" }
+    ]
+  },
+  {
+    id: "arrival-ready",
+    title: "Arrival ready",
+    hint: "Park, toilet, supplies",
+    steps: [
       { label: "Parking", query: "parking" },
-      { label: "Sights", query: "landmark" }
+      { label: "Toilet", query: "toilets" },
+      { label: "Supplies", query: "grocery" }
     ]
   },
   {
@@ -661,8 +680,8 @@ export function App() {
   const routeStarterPresets = useMemo(() => {
     const preferredIds =
       currentTrip?.type === "road_trip"
-        ? ["road-leg", "nature-loop", "city-day"]
-        : ["weekend-base", "city-day", "nature-loop"];
+        ? ["road-leg", "arrival-ready", "nature-loop"]
+        : ["weekend-base", "arrival-ready", "city-day"];
     return preferredIds
       .map((id) => destinationPresets.find((preset) => preset.id === id))
       .filter((preset): preset is DestinationPreset => Boolean(preset));
@@ -671,19 +690,19 @@ export function App() {
     const queries =
       currentTrip?.type === "road_trip"
         ? routeQueue.length
-          ? ["fuel", "parking", "restaurant", "landmark", "hotel", "viewpoint"]
-          : ["hotel", "fuel", "parking", "landmark", "restaurant", "viewpoint"]
+          ? ["fuel", "ev charging", "rest area", "restaurant", "parking", "landmark"]
+          : ["hotel", "fuel", "ev charging", "rest area", "parking", "restaurant"]
         : mainStops.length
-          ? ["landmark", "restaurant", "cafe", "park", "waterfall", "theme park"]
-          : ["hotel", "landmark", "restaurant", "viewpoint", "park", "waterfall"];
+          ? ["landmark", "restaurant", "cafe", "park", "toilets", "pharmacy"]
+          : ["hotel", "resort", "landmark", "restaurant", "viewpoint", "park"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, mainStops.length, routeQueue.length]);
   const draftExploreChips = useMemo(() => {
     const queries =
       currentTrip?.type === "road_trip"
-        ? ["fuel", "parking", "restaurant"]
+        ? ["fuel", "ev charging", "rest area"]
         : destinationScope === "branch"
-          ? ["landmark", "cafe", "park"]
+          ? ["landmark", "cafe", "toilets"]
           : ["landmark", "restaurant", "hotel"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, destinationScope]);
