@@ -301,14 +301,34 @@ function destinationTextSegments(value: string) {
     });
 }
 
+function extractDestinationContext(line: string) {
+  const notes: string[] = [];
+  let text = line.trim();
+
+  text = text.replace(/^\s*(day\s*\d+|d\d+)\s*[:.)-]\s*/i, (_match, label: string) => {
+    notes.push(label.replace(/\s+/g, " ").replace(/^d(\d+)$/i, "Day $1"));
+    return "";
+  });
+  text = text.replace(
+    /^\s*(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\s*[:-]\s*/i,
+    (_match, time: string) => {
+      notes.push(time.trim().toUpperCase().replace(/\s+/g, " "));
+      return "";
+    }
+  );
+  text = text.replace(/\s+\((overnight|stay|lunch|dinner|breakfast|coffee|photo stop|optional)\)\s*$/i, (_match, label: string) => {
+    notes.push(label);
+    return "";
+  });
+
+  return { line: text, note: notes.join(" · ") };
+}
+
 function cleanDestinationListLine(line: string) {
   return line
     .replace(/^\s*(?:[-*+]|\u2022|\d+[.)])\s+/, "")
-    .replace(/^\s*(?:day\s*\d+|d\d+)\s*[:.)-]\s*/i, "")
     .replace(/^\s*(?:stop|destination|leg)\s*\d*\s*[:.)-]\s*/i, "")
     .replace(/^\s*(?:start|end|finish|route|trip|itinerary|drive|road trip)\s*[:.)-]\s*/i, "")
-    .replace(/^\s*(?:\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\s*[:-]\s*/i, "")
-    .replace(/\s+\((?:overnight|stay|lunch|dinner|breakfast|coffee|photo stop|optional)\)\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^[,.: -]+|[,.: -]+$/g, "");
@@ -332,9 +352,11 @@ function destinationItemsFromText(value: string) {
   const ignored = new Set(["and", "then", "route", "trip", "itinerary", "drive", "road trip"]);
   const items: DestinationListItem[] = [];
   for (const segment of destinationTextSegments(value)) {
-    const line = cleanDestinationListLine(segment);
+    const context = extractDestinationContext(segment);
+    const line = cleanDestinationListLine(context.line);
     if (line.length < 3 || ignored.has(line.toLowerCase())) continue;
     const item = splitDestinationNote(line);
+    item.note = [context.note, item.note].filter(Boolean).join(" · ");
     if (item.query.length < 3 || items.some((existing) => existing.query === item.query)) continue;
     items.push(item);
     if (items.length >= destinationListLimit) break;
