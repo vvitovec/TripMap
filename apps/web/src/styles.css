@@ -804,6 +804,29 @@ textarea {
   font-size: 10px;
 }
 
+.destination-list-preview strong,
+.destination-list-preview em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.destination-list-preview strong {
+  font-size: 12px;
+}
+
+.destination-list-preview em {
+  color: #667085;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.destination-list-preview em::before {
+  content: "- ";
+}
+
 .destination-list-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 92px;

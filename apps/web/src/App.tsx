@@ -43,6 +43,7 @@ type DestinationPreset = {
   steps: Array<{ label: string; query: string }>;
 };
 type PlaceChip = { label: string; query: string; hint: string };
+type DestinationListItem = { query: string; note: string };
 type QueuedPlace = {
   place: PlaceSearchResult;
   title: string;
@@ -313,12 +314,36 @@ function cleanDestinationListLine(line: string) {
     .replace(/^[,.: -]+|[,.: -]+$/g, "");
 }
 
-function destinationLinesFromText(value: string) {
+function splitDestinationNote(line: string): DestinationListItem {
+  if (/https?:\/\//i.test(line)) return { query: line, note: "" };
+  const match = line.match(/^(.{3,}?)\s+(?:--|[-\u2013\u2014])\s+(.{3,})$/);
+  if (!match) return { query: line, note: "" };
+
+  const query = match[1]?.trim() ?? "";
+  const note = match[2]?.trim() ?? "";
+  const noteLooksIntentional =
+    /^[a-z]/.test(note) ||
+    /\b(?:arrive|arrival|book|booking|breakfast|check|coffee|depart|departure|dinner|flight|hotel|lunch|note|optional|overnight|photo|reservation|stay|stop|ticket|train|visit)\b/i.test(note);
+  if (!query || !note || !noteLooksIntentional) return { query: line, note: "" };
+  return { query, note };
+}
+
+function destinationItemsFromText(value: string) {
   const ignored = new Set(["and", "then", "route", "trip", "itinerary", "drive", "road trip"]);
-  return destinationTextSegments(value)
-    .map(cleanDestinationListLine)
-    .filter((line, index, lines) => line.length >= 3 && !ignored.has(line.toLowerCase()) && lines.indexOf(line) === index)
-    .slice(0, destinationListLimit);
+  const items: DestinationListItem[] = [];
+  for (const segment of destinationTextSegments(value)) {
+    const line = cleanDestinationListLine(segment);
+    if (line.length < 3 || ignored.has(line.toLowerCase())) continue;
+    const item = splitDestinationNote(line);
+    if (item.query.length < 3 || items.some((existing) => existing.query === item.query)) continue;
+    items.push(item);
+    if (items.length >= destinationListLimit) break;
+  }
+  return items;
+}
+
+function destinationListItemText(item: DestinationListItem) {
+  return item.note ? `${item.query} - ${item.note}` : item.query;
 }
 
 function isPlaceSearchResult(value: unknown): value is PlaceSearchResult {
@@ -669,9 +694,13 @@ export function App() {
     [...orderedStops].reverse().forEach((stop) => addRecent(stopToPlace(stop)));
     return [...places.values()].slice(0, 6);
   }, [orderedStops, placeDraft, recentPlaces, routeQueue]);
-  const destinationListQueries = useMemo(
-    () => destinationLinesFromText(destinationListText),
+  const destinationListItems = useMemo(
+    () => destinationItemsFromText(destinationListText),
     [destinationListText]
+  );
+  const destinationListQueries = useMemo(
+    () => destinationListItems.map((item) => item.query),
+    [destinationListItems]
   );
   const topVisiblePlace = visiblePlaceResults[0] ?? null;
   const newTripTimeError = timeRangeError(newTripStartsAt, newTripEndsAt);
@@ -1120,15 +1149,15 @@ export function App() {
 
   function handlePlaceSearchPaste(event: React.ClipboardEvent<HTMLInputElement>) {
     const pasted = event.clipboardData.getData("text");
-    const lines = destinationLinesFromText(pasted);
-    if (lines.length < 2) return;
+    const pastedItems = destinationItemsFromText(pasted);
+    if (pastedItems.length < 2) return;
 
     event.preventDefault();
-    const existingLines = destinationLinesFromText(destinationListText);
-    const merged = [...existingLines, ...lines]
-      .filter((line, index, list) => list.indexOf(line) === index)
+    const existingItems = destinationItemsFromText(destinationListText);
+    const merged = [...existingItems, ...pastedItems]
+      .filter((item, index, list) => list.findIndex((other) => other.query === item.query) === index)
       .slice(0, destinationListLimit);
-    setDestinationListText(merged.join("\n"));
+    setDestinationListText(merged.map(destinationListItemText).join("\n"));
     setDestinationListStatus(`${merged.length} ready in the destination list.`);
     setPlaceQuery("");
     setPlaceResults([]);
@@ -1253,8 +1282,8 @@ export function App() {
 
   async function queueDestinationList() {
     if (!selectedTripId) return;
-    const queries = destinationListQueries;
-    if (!queries.length) {
+    const items = destinationListItems;
+    if (!items.length) {
       setError("Add at least one destination line.");
       return;
     }
@@ -1272,10 +1301,11 @@ export function App() {
     const seenPlaceIds = new Set(routeQueue.map((item) => item.place.id));
     let cursor: { lat: number; lng: number } | undefined = queueAnchor ?? searchAnchor ?? undefined;
     let lastPlaces: PlaceSearchResult[] = [];
-    let lastQuery = queries[queries.length - 1] ?? "";
+    let lastQuery = items[items.length - 1]?.query ?? "";
 
     try {
-      for (const query of queries) {
+      for (const item of items) {
+        const query = item.query;
         const { places } = await api.searchPlaces(query, cursor);
         lastPlaces = places;
         lastQuery = query;
@@ -1291,7 +1321,7 @@ export function App() {
           continue;
         }
 
-        additions.push({ place: nextPlace, title: nextPlace.name, note: "", arrivedAt: "", departedAt: "" });
+        additions.push({ place: nextPlace, title: nextPlace.name, note: item.note, arrivedAt: "", departedAt: "" });
         seenPlaceIds.add(nextPlace.id);
         cursor = nextPlace;
       }
@@ -2819,10 +2849,11 @@ export function App() {
                     />
                     {destinationListQueries.length ? (
                       <div className="destination-list-preview" aria-label="Parsed destinations">
-                        {destinationListQueries.slice(0, 6).map((query, index) => (
-                          <span key={`${query}-${index}`}>
+                        {destinationListItems.slice(0, 6).map((item, index) => (
+                          <span key={`${item.query}-${index}`}>
                             <small>{index + 1}</small>
-                            {query}
+                            <strong>{item.query}</strong>
+                            {item.note ? <em>{item.note}</em> : null}
                           </span>
                         ))}
                         {destinationListQueries.length > 6 ? (
