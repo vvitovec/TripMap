@@ -651,6 +651,15 @@ function cleanedMapLinkText(value: string) {
     .trim();
 }
 
+function isMapLinkPathNoise(value: string) {
+  const lower = value.toLowerCase();
+  return (
+    ["maps", "place", "search", "dir", "data", "entry", "api"].includes(lower) ||
+    /^@?-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?/.test(lower) ||
+    /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?/.test(lower)
+  );
+}
+
 function isAllowedMapLinkHost(hostname: string) {
   const host = hostname.toLowerCase();
   return (
@@ -722,8 +731,9 @@ function mapLinkSearchText(query: string) {
   const pathParts = url.pathname
     .split("/")
     .map(cleanedMapLinkText)
-    .filter((part) => part.length >= 3 && !["maps", "place", "search", "dir"].includes(part.toLowerCase()));
-  return pathParts[0] ?? null;
+    .filter((part) => part.length >= 3 && !isMapLinkPathNoise(part));
+  const isRouteLink = url.pathname.split("/").some((part) => part.toLowerCase() === "dir");
+  return (isRouteLink ? pathParts.at(-1) : pathParts[0]) ?? null;
 }
 
 function parseCoordinateQuery(query: string) {
