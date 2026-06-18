@@ -1155,6 +1155,15 @@ export function App() {
     () => parseDestinationSearchIntent(placeQuery, searchAnchorLabel),
     [placeQuery, searchAnchorLabel]
   );
+  const destinationSearchStatusLabel = useMemo(() => {
+    const query = placeQuery.trim();
+    if (!destinationSearchIntent) return query ? `"${query}" near ${searchAnchorLabel}` : "";
+    if (destinationSearchIntent.kind === "nearby") return destinationSearchIntent.title;
+    if (destinationSearchIntent.kind === "category") return `${destinationSearchIntent.title} around ${searchAnchorLabel}`;
+    if (destinationSearchIntent.kind === "coordinates") return "coordinates";
+    if (destinationSearchIntent.kind === "map") return "map link";
+    return `"${query}" near ${searchAnchorLabel}`;
+  }, [destinationSearchIntent, placeQuery, searchAnchorLabel]);
   const namedSearchAnchor =
     searchOrigin === "draft" && placeDraft
       ? placeDraft.name
@@ -3566,9 +3575,9 @@ export function App() {
                           : placeQuery.trim().length < 3
                             ? "Type 3 or more characters"
                             : searchingPlaces
-                              ? `Searching "${placeQuery.trim()}" near ${searchAnchorLabel}`
+                              ? `Searching ${destinationSearchStatusLabel}`
                               : rankedPlaceResults.length
-                                ? `${rankedPlaceResults.length} result${rankedPlaceResults.length === 1 ? "" : "s"} for "${placeQuery.trim()}"`
+                                ? `${rankedPlaceResults.length} result${rankedPlaceResults.length === 1 ? "" : "s"} for ${destinationSearchStatusLabel}`
                                 : ""}
                       </span>
                       {placeSearchError ? (
