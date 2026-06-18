@@ -1356,7 +1356,7 @@ export function App() {
     setError(null);
 
     const additions: QueuedPlace[] = [];
-    const misses: string[] = [];
+    const misses: DestinationListItem[] = [];
     const seenPlaceIds = new Set(routeQueue.map((item) => item.place.id));
     let cursor: { lat: number; lng: number } | undefined = queueAnchor ?? searchAnchor ?? undefined;
     let lastPlaces: PlaceSearchResult[] = [];
@@ -1376,7 +1376,7 @@ export function App() {
         );
 
         if (!nextPlace) {
-          misses.push(query);
+          misses.push(item);
           continue;
         }
 
@@ -1392,7 +1392,10 @@ export function App() {
       if (!additions.length) {
         setDestinationListStatus(
           misses.length
-            ? `No new matches for ${misses.slice(0, 3).join(", ")}${misses.length > 3 ? "..." : ""}`
+            ? `No new matches for ${misses
+                .slice(0, 3)
+                .map((item) => item.query)
+                .join(", ")}${misses.length > 3 ? "..." : ""}`
             : "No new places found."
         );
         return;
@@ -1403,9 +1406,9 @@ export function App() {
         return [...items, ...additions.filter((item) => !existingIds.has(item.place.id))];
       });
       additions.forEach((item) => rememberRecentPlace(item.place));
-      setDestinationListText("");
+      setDestinationListText(misses.length ? misses.map(destinationListItemText).join("\n") : "");
       setDestinationListStatus(
-        `${additions.length} queued${misses.length ? ` · ${misses.length} skipped` : ""}`
+        misses.length ? `${additions.length} queued · ${misses.length} left to edit` : `${additions.length} queued`
       );
       setSearchOrigin("route");
       setPlaceDraft(null);
