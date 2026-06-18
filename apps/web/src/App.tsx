@@ -475,6 +475,46 @@ function cleanDestinationListLine(line: string) {
     .replace(/^[,.: -]+|[,.: -]+$/g, "");
 }
 
+function isDestinationNoiseLine(line: string) {
+  const lower = line.toLowerCase();
+  if (
+    [
+      "and",
+      "then",
+      "route",
+      "trip",
+      "itinerary",
+      "drive",
+      "road trip",
+      "directions",
+      "website",
+      "call",
+      "save",
+      "share",
+      "send to phone",
+      "copy link",
+      "reviews",
+      "photos",
+      "overview",
+      "about",
+      "menu",
+      "reserve",
+      "book",
+      "open",
+      "closed"
+    ].includes(lower)
+  ) {
+    return true;
+  }
+  if (/^\+?\d[\d\s().-]{5,}$/.test(line)) return true;
+  if (/^\d+(?:\.\d)?\s*(?:stars?|star rating)?$/i.test(line)) return true;
+  if (/^\d+(?:\.\d)?\s*\(\s*[\d,.\s]+(?:reviews?)?\s*\)$/i.test(line)) return true;
+  if (/^[\d,.\s]+reviews?$/i.test(line)) return true;
+  if (/^(?:open|closed)(?:\s+now)?(?:\s*[.\u00b7-]\s*.*)?$/i.test(line)) return true;
+  if (/^(?:opens|closes)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?$/i.test(line)) return true;
+  return false;
+}
+
 function extractDestinationAction(line: string): DestinationListItem {
   if (/https?:\/\//i.test(line)) return { query: line, note: "" };
   const patterns: Array<{ pattern: RegExp; note: string }> = [
@@ -513,7 +553,6 @@ function splitDestinationNote(line: string): DestinationListItem {
 }
 
 function destinationItemsFromText(value: string) {
-  const ignored = new Set(["and", "then", "route", "trip", "itinerary", "drive", "road trip"]);
   const items: DestinationListItem[] = [];
   let activeSectionNote = "";
   for (const segment of destinationTextSegments(value)) {
@@ -522,7 +561,7 @@ function destinationItemsFromText(value: string) {
     if (sectionNote) activeSectionNote = sectionNote;
     const line = cleanDestinationListLine(context.line);
     if (!line && sectionNote) continue;
-    if (line.length < 3 || ignored.has(line.toLowerCase())) continue;
+    if (line.length < 3 || isDestinationNoiseLine(line)) continue;
     const action = extractDestinationAction(line);
     const item = splitDestinationNote(action.query);
     item.note = combineDestinationNotes(activeSectionNote, context.note, action.note, item.note);
