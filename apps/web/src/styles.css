@@ -307,11 +307,43 @@ textarea {
 
 .map-stage {
   position: relative;
+  background:
+    radial-gradient(circle at top, rgba(249, 115, 22, 0.16), transparent 40%),
+    linear-gradient(180deg, #14303d 0%, #101820 100%);
 }
 
 .map-canvas {
   position: absolute;
   inset: 0;
+}
+
+.map-loading-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  color: rgba(248, 250, 252, 0.92);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.map-loading-state svg {
+  opacity: 0.9;
+}
+
+.spin {
+  animation: tripmap-spin 0.9s linear infinite;
+}
+
+@keyframes tripmap-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .eyebrow {

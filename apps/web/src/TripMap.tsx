@@ -1,3 +1,4 @@
+import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import type { PlaceSearchResult, Trip } from "./types";

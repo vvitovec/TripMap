@@ -25,9 +25,8 @@ import {
   X,
   Upload
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import { TripMap } from "./TripMap";
 import type { Collaborator, Folder, MediaItem, Note, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
 
 type AuthMode = "login" | "register";
@@ -212,6 +211,19 @@ const searchCategoryAliasEntries: Array<[string, string]> = [
 const searchCategoryAliases = new Map<string, string>(
   searchCategoryAliasEntries.map(([alias, query]) => [alias.toLowerCase(), query])
 );
+const LazyTripMap = lazy(async () => {
+  const module = await import("./TripMap");
+  return { default: module.TripMap };
+});
+
+function MapLoadingState({ label = "Loading map" }: { label?: string }) {
+  return (
+    <div className="map-loading-state" aria-live="polite" aria-busy="true">
+      <Loader2 className="spin" size={18} />
+      <span>{label}</span>
+    </div>
+  );
+}
 
 function pickPlaceChips(queries: string[]) {
   const seen = new Set<string>();
@@ -2891,12 +2903,14 @@ export function App() {
       <main className="share-screen">
         {detail ? (
           <section className="share-shell">
-            <TripMap
-              trips={[{ ...detail.trip, stops: detail.stops }]}
-              selectedTripId={detail.trip.id}
-              onSelectTrip={() => undefined}
-              onMapClick={() => undefined}
-            />
+            <Suspense fallback={<MapLoadingState label="Loading shared map" />}>
+              <LazyTripMap
+                trips={[{ ...detail.trip, stops: detail.stops }]}
+                selectedTripId={detail.trip.id}
+                onSelectTrip={() => undefined}
+                onMapClick={() => undefined}
+              />
+            </Suspense>
             <aside className="share-panel">
               <p className="eyebrow">Shared TripMap</p>
               <h1>{detail.trip.title}</h1>
@@ -3141,30 +3155,32 @@ export function App() {
       </aside>
 
       <section className="map-stage">
-        <TripMap
-          trips={filteredTrips}
-          selectedTripId={selectedTripId}
-          selectedStopId={selectedStopId}
-          previewPlace={placeDraft}
-          previewPlaces={mapPreviewPlaces}
-          previewRoute={mapPreviewRoute}
-          pinMode={destinationMode === "coordinates"}
-          onSelectTrip={selectTripId}
-          onSelectStop={selectStopId}
-          onSelectPreviewPlace={selectPreviewPlaceFromMap}
-          onMapClick={previewMapPin}
-          onPinMove={(lat, lng) => {
-            const hasCustomTitle = Boolean(
-              placeDraft &&
-                draftTitle.trim() &&
-                draftTitle.trim().toLowerCase() !== placeDraft.name.trim().toLowerCase()
-            );
-            previewMapPin(lat, lng, { preserveDraftTitle: hasCustomTitle, revealDraft: false }).catch((error) =>
-              setError(error instanceof Error ? error.message : String(error))
-            );
-          }}
-          onViewChange={setMapFocus}
-        />
+        <Suspense fallback={<MapLoadingState />}>
+          <LazyTripMap
+            trips={filteredTrips}
+            selectedTripId={selectedTripId}
+            selectedStopId={selectedStopId}
+            previewPlace={placeDraft}
+            previewPlaces={mapPreviewPlaces}
+            previewRoute={mapPreviewRoute}
+            pinMode={destinationMode === "coordinates"}
+            onSelectTrip={selectTripId}
+            onSelectStop={selectStopId}
+            onSelectPreviewPlace={selectPreviewPlaceFromMap}
+            onMapClick={previewMapPin}
+            onPinMove={(lat, lng) => {
+              const hasCustomTitle = Boolean(
+                placeDraft &&
+                  draftTitle.trim() &&
+                  draftTitle.trim().toLowerCase() !== placeDraft.name.trim().toLowerCase()
+              );
+              previewMapPin(lat, lng, { preserveDraftTitle: hasCustomTitle, revealDraft: false }).catch((error) =>
+                setError(error instanceof Error ? error.message : String(error))
+              );
+            }}
+            onViewChange={setMapFocus}
+          />
+        </Suspense>
       </section>
 
       <aside className="detail-panel">
