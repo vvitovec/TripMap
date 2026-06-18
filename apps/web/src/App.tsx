@@ -58,6 +58,9 @@ type LocatedMediaGroup = {
   lng: number;
 };
 
+const recentPlacesKey = "tripmap.recentPlaces.v1";
+const recentPlacesLimit = 12;
+
 const placeChipGroups = [
   {
     title: "Stay",
@@ -255,6 +258,52 @@ function normalizedPlaceName(value: string) {
   return value.toLowerCase().replace(/\W+/g, "");
 }
 
+function placeLocationKey(place: PlaceSearchResult) {
+  return `${normalizedPlaceName(place.name)}-${place.lat.toFixed(3)}-${place.lng.toFixed(3)}`;
+}
+
+function isPlaceSearchResult(value: unknown): value is PlaceSearchResult {
+  if (!value || typeof value !== "object") return false;
+  const place = value as PlaceSearchResult;
+  return (
+    typeof place.id === "string" &&
+    typeof place.name === "string" &&
+    typeof place.label === "string" &&
+    typeof place.category === "string" &&
+    typeof place.type === "string" &&
+    typeof place.lat === "number" &&
+    Number.isFinite(place.lat) &&
+    typeof place.lng === "number" &&
+    Number.isFinite(place.lng) &&
+    ["nominatim", "map", "overpass"].includes(place.source)
+  );
+}
+
+function loadRecentPlaces() {
+  try {
+    const stored = window.localStorage.getItem(recentPlacesKey);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isPlaceSearchResult).slice(0, recentPlacesLimit);
+  } catch {
+    return [];
+  }
+}
+
+function stopToPlace(stop: Stop): PlaceSearchResult {
+  return {
+    id: `stop-${stop.id}`,
+    name: stop.title,
+    label: `${stop.title} · ${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}`,
+    category: stop.branch_of ? "side trip" : "saved stop",
+    type: stop.branch_of ? "side trip" : "saved stop",
+    lat: stop.lat,
+    lng: stop.lng,
+    source: "map"
+  };
+}
+
 function toDateTimeInputValue(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -296,6 +345,7 @@ export function App() {
   const [placeResults, setPlaceResults] = useState<PlaceSearchResult[]>([]);
   const [placeResultFilter, setPlaceResultFilter] = useState("all");
   const [placeDraft, setPlaceDraft] = useState<PlaceSearchResult | null>(null);
+  const [recentPlaces, setRecentPlaces] = useState<PlaceSearchResult[]>(() => loadRecentPlaces());
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftArrivedAt, setDraftArrivedAt] = useState("");
@@ -537,6 +587,26 @@ export function App() {
         : rankedPlaceResults.filter((place) => placeKindLabel(place) === placeResultFilter),
     [placeResultFilter, rankedPlaceResults]
   );
+  const recentDestinationPlaces = useMemo(() => {
+    const places = new Map<string, PlaceSearchResult>();
+    const addRecent = (place: PlaceSearchResult | null | undefined) => {
+      if (!place) return;
+      const locationKey = placeLocationKey(place);
+      const hasPlace = [...places.values()].some(
+        (item) => item.id === place.id || placeLocationKey(item) === locationKey
+      );
+      if (hasPlace) {
+        return;
+      }
+      places.set(place.id, place);
+    };
+
+    addRecent(placeDraft);
+    [...routeQueue].reverse().forEach((item) => addRecent(item.place));
+    recentPlaces.forEach(addRecent);
+    [...orderedStops].reverse().forEach((stop) => addRecent(stopToPlace(stop)));
+    return [...places.values()].slice(0, 6);
+  }, [orderedStops, placeDraft, recentPlaces, routeQueue]);
   const topVisiblePlace = visiblePlaceResults[0] ?? null;
   const newTripTimeError = timeRangeError(newTripStartsAt, newTripEndsAt);
   const tripTimeError = timeRangeError(tripStartsAtDraft, tripEndsAtDraft);
@@ -823,6 +893,28 @@ export function App() {
     };
   }, [placeQuery, searchAnchor, selectedTripId, user]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(recentPlacesKey, JSON.stringify(recentPlaces.slice(0, recentPlacesLimit)));
+    } catch {
+      // Local storage can be unavailable in private browsing; recents remain session-only.
+    }
+  }, [recentPlaces]);
+
+  function rememberRecentPlace(place: PlaceSearchResult) {
+    setRecentPlaces((items) => {
+      const next = [
+        place,
+        ...items.filter((item) => {
+          if (item.id === place.id) return false;
+          if (distanceKm(item, place) <= 0.03) return false;
+          return !(normalizedPlaceName(item.name) === normalizedPlaceName(place.name) && distanceKm(item, place) <= 0.5);
+        })
+      ];
+      return next.slice(0, recentPlacesLimit);
+    });
+  }
+
   function resetDestinationDraft() {
     setPlaceDraft(null);
     setDraftTitle("");
@@ -934,6 +1026,7 @@ export function App() {
   }
 
   function selectPlace(place: PlaceSearchResult, options: { revealDraft?: boolean } = { revealDraft: true }) {
+    rememberRecentPlace(place);
     setPlaceDraft(place);
     setDraftTitle(place.name);
     setDraftNote("");
@@ -1059,6 +1152,7 @@ export function App() {
         const existingIds = new Set(items.map((item) => item.place.id));
         return [...items, ...additions.filter((item) => !existingIds.has(item.place.id))];
       });
+      additions.forEach((item) => rememberRecentPlace(item.place));
       setSearchOrigin("route");
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
@@ -1200,6 +1294,7 @@ export function App() {
     }
     setBusy(true);
     setError(null);
+    rememberRecentPlace(place);
     const { sortOrder, branchParent } = destinationInsertionPlan();
     try {
       await makeRoomForSortOrder(sortOrder);
@@ -1245,6 +1340,7 @@ export function App() {
           )
         : [...items, { place, title: title.trim() || place.name, note, arrivedAt, departedAt }]
     );
+    rememberRecentPlace(place);
     setSearchOrigin("route");
   }
 
@@ -2571,6 +2667,75 @@ export function App() {
                   </button>
                 </div>
               )}
+
+              {destinationMode !== "coordinates" && recentDestinationPlaces.length ? (
+                <div className="recent-destinations">
+                  <div className="recent-destinations-heading">
+                    <span>Recent & saved</span>
+                    {recentPlaces.length ? (
+                      <button onClick={() => setRecentPlaces([])} type="button">
+                        <X size={13} /> Clear recents
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="recent-destination-list">
+                    {recentDestinationPlaces.map((place) => {
+                      const savedStop = savedStopForPlace(place);
+                      const areaLabel = placeAreaLabel(place);
+                      const distanceLabel = placeDistanceLabel(place);
+                      return (
+                        <article
+                          className={savedStop ? "recent-destination saved" : "recent-destination"}
+                          key={place.id}
+                        >
+                          <button
+                            className="recent-destination-main"
+                            onClick={() => (savedStop ? selectStopId(savedStop.id) : selectPlace(place))}
+                            type="button"
+                          >
+                            <MapPin size={15} />
+                            <span>
+                              <strong>{savedStop?.title ?? place.name}</strong>
+                              <small>
+                                {[savedStop ? "Saved stop" : placeKindLabel(place), distanceLabel, areaLabel]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </small>
+                            </span>
+                          </button>
+                          <div className="recent-destination-actions">
+                            <button
+                              onClick={() =>
+                                savedStop ? selectStopId(savedStop.id) : addPlaceToRoute(place, place.name, "")
+                              }
+                              disabled={busy}
+                              type="button"
+                            >
+                              {savedStop ? <Check size={13} /> : <Plus size={13} />}
+                              {destinationAddLabel(savedStop)}
+                            </button>
+                            <button
+                              onClick={() => exploreAroundPlace(place, savedStop)}
+                              disabled={busy}
+                              type="button"
+                            >
+                              <Compass size={13} /> Explore
+                            </button>
+                            <button
+                              onClick={() => queuePlace(place)}
+                              disabled={busy || queuedPlaceIds.has(place.id) || Boolean(savedStop)}
+                              type="button"
+                            >
+                              {queuedPlaceIds.has(place.id) || savedStop ? <Check size={13} /> : <ListFilter size={13} />}
+                              {destinationQueueLabel(place, savedStop)}
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               {rankedPlaceResults.length > 0 && destinationMode !== "coordinates" ? (
                 <div className="place-results">

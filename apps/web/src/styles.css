@@ -782,6 +782,136 @@ textarea {
   background: #ecfdf3;
 }
 
+.recent-destinations {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #f8faf8;
+  padding: 10px;
+}
+
+.recent-destinations-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recent-destinations-heading span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.recent-destinations-heading button {
+  border: 1px solid #d6dde5;
+  border-radius: 8px;
+  background: #fff;
+  color: #667085;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.recent-destination-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.recent-destination {
+  min-width: 0;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.recent-destination.saved {
+  border-color: #bbebc8;
+  background: #f8fff9;
+}
+
+.recent-destination-main {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #17202a;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 7px;
+  padding: 9px;
+  text-align: left;
+}
+
+.recent-destination-main span,
+.recent-destination-main strong,
+.recent-destination-main small {
+  display: block;
+  min-width: 0;
+}
+
+.recent-destination-main strong,
+.recent-destination-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-destination-main strong {
+  font-size: 13px;
+}
+
+.recent-destination-main small {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.recent-destination-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid #edf1ee;
+}
+
+.recent-destination-actions button {
+  min-width: 0;
+  min-height: 32px;
+  border: 0;
+  border-right: 1px solid #edf1ee;
+  background: #fff;
+  color: #35536d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.recent-destination-actions button:first-child {
+  color: #276749;
+}
+
+.recent-destination-actions button:last-child {
+  border-right: 0;
+}
+
+.recent-destination-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .coordinate-entry {
   display: grid;
   gap: 8px;
@@ -2045,7 +2175,8 @@ textarea {
 
   .destination-presets,
   .destination-plan-steps,
-  .destination-plan-actions {
+  .destination-plan-actions,
+  .recent-destination-list {
     grid-template-columns: 1fr;
   }
 
