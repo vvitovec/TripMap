@@ -96,6 +96,9 @@ const placeChipGroups = [
       { label: "Ruins", query: "ruins", hint: "Old sites" },
       { label: "Trails", query: "trail", hint: "Walks" },
       { label: "Waterfalls", query: "waterfall", hint: "Nature" },
+      { label: "Lakes", query: "lake", hint: "Water" },
+      { label: "Peaks", query: "peak", hint: "Mountains" },
+      { label: "Ski areas", query: "ski area", hint: "Winter" },
       { label: "Theme parks", query: "theme park", hint: "Fun" },
       { label: "Zoos", query: "zoo", hint: "Animals" },
       { label: "Aquariums", query: "aquarium", hint: "Marine" }
@@ -108,7 +111,8 @@ const placeChipGroups = [
       { label: "Cafes", query: "cafe", hint: "Breaks" },
       { label: "Bakeries", query: "bakery", hint: "Pastries" },
       { label: "Ice cream", query: "ice cream", hint: "Treats" },
-      { label: "Bars", query: "bar", hint: "Evening" }
+      { label: "Bars", query: "bar", hint: "Evening" },
+      { label: "Wineries", query: "winery", hint: "Tasting" }
     ]
   },
   {
@@ -138,8 +142,10 @@ const placeChipGroups = [
     title: "Essentials",
     chips: [
       { label: "Groceries", query: "grocery", hint: "Supplies" },
+      { label: "Shopping", query: "shopping mall", hint: "Malls" },
       { label: "Souvenirs", query: "souvenir shop", hint: "Gifts" },
       { label: "Pharmacies", query: "pharmacy", hint: "Health" },
+      { label: "Info", query: "tourist information", hint: "Visitor help" },
       { label: "Toilets", query: "toilets", hint: "Stops" },
       { label: "Hospitals", query: "hospital", hint: "Emergency" },
       { label: "Clinics", query: "clinic", hint: "Care" },
@@ -319,6 +325,10 @@ function defaultPlaceNote(place: PlaceSearchResult, query = "") {
   if (/\b(viewpoint|photo)\b/.test(text)) return "Photo stop";
   if (/\b(playground)\b/.test(text)) return "Play";
   if (/\b(picnic)\b/.test(text)) return "Picnic";
+  if (/\b(lake|peak|mountain|ski area|ski resort|skiing)\b/.test(text)) return "Outdoor stop";
+  if (/\b(shopping mall|mall|shopping)\b/.test(text)) return "Shopping";
+  if (/\b(winery|vineyard|wine tasting)\b/.test(text)) return "Wine tasting";
+  if (/\b(tourist information|visitor center|visitor centre)\b/.test(text)) return "Visitor info";
   if (/\b(landmark|tourist attraction|attraction|museum|park|beach|monument|castle|church|cathedral|temple|mosque|synagogue|bridge|trail|waterfall|historic|ruins|zoo|aquarium|theme park)\b/.test(text)) {
     return "Visit";
   }
@@ -1008,8 +1018,8 @@ export function App() {
           ? ["fuel", "ev charging", "rest area", "restaurant", "bakery", "parking"]
           : ["hotel", "fuel", "ev charging", "rest area", "parking", "restaurant"]
         : mainStops.length
-          ? ["landmark", "restaurant", "cafe", "ice cream", "playground", "toilets"]
-          : ["hotel", "resort", "landmark", "restaurant", "viewpoint", "park"];
+          ? ["landmark", "restaurant", "cafe", "ice cream", "shopping mall", "toilets"]
+          : ["hotel", "resort", "landmark", "restaurant", "viewpoint", "lake"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, mainStops.length, routeQueue.length]);
   const destinationSearchSuggestions = useMemo<DestinationSearchSuggestion[]>(() => {
@@ -1042,7 +1052,8 @@ export function App() {
             { label: "Landmarks", category: "landmark" },
             { label: "Viewpoints", category: "viewpoint" },
             { label: "Food nearby", category: "restaurant" },
-            { label: "Ice cream", category: "ice cream" }
+            { label: "Lakes", category: "lake" },
+            { label: "Shopping", category: "shopping mall" }
           ];
 
     return seeds.map((seed) => ({
@@ -1057,7 +1068,7 @@ export function App() {
       currentTrip?.type === "road_trip"
         ? ["fuel", "ev charging", "rest area"]
         : destinationScope === "branch"
-          ? ["landmark", "cafe", "ice cream"]
+          ? ["landmark", "cafe", "lake"]
           : ["landmark", "restaurant", "hotel"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type, destinationScope]);
