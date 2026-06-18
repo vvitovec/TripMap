@@ -713,6 +713,8 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [placeQuery, setPlaceQuery] = useState("");
   const [placeResults, setPlaceResults] = useState<PlaceSearchResult[]>([]);
+  const [placeSearchError, setPlaceSearchError] = useState("");
+  const [placeSearchRetryKey, setPlaceSearchRetryKey] = useState(0);
   const [placeResultFilter, setPlaceResultFilter] = useState("all");
   const [placeDraft, setPlaceDraft] = useState<PlaceSearchResult | null>(null);
   const [recentPlaces, setRecentPlaces] = useState<PlaceSearchResult[]>(() => loadRecentPlaces());
@@ -1321,11 +1323,13 @@ export function App() {
     const query = placeQuery.trim();
     if (!user || !selectedTripId || query.length < 3) {
       setPlaceResults([]);
+      setPlaceSearchError("");
       setSearchingPlaces(false);
       return;
     }
     let cancelled = false;
     setPlaceResults([]);
+    setPlaceSearchError("");
     setError(null);
     setSearchingPlaces(true);
     const timer = window.setTimeout(() => {
@@ -1335,7 +1339,7 @@ export function App() {
           if (!cancelled) setPlaceResults(places);
         })
         .catch((error) => {
-          if (!cancelled) setError(error.message);
+          if (!cancelled) setPlaceSearchError(error.message);
         })
         .finally(() => {
           if (!cancelled) setSearchingPlaces(false);
@@ -1345,7 +1349,7 @@ export function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [placeQuery, placeSearchAnchor, selectedTripId, user]);
+  }, [placeQuery, placeSearchAnchor, placeSearchRetryKey, selectedTripId, user]);
 
   useEffect(() => {
     try {
@@ -1400,6 +1404,7 @@ export function App() {
   function openDestinationMode(mode: DestinationMode) {
     resetDestinationDraft();
     setPlaceQuery("");
+    setPlaceSearchError("");
     setDestinationMode(mode);
     setError(null);
     scrollToDestinationPanel();
@@ -3051,7 +3056,7 @@ export function App() {
                   onClick={() => setDestinationMode("search")}
                   type="button"
                 >
-                  <Search size={15} /> Search
+                  <Search size={15} /> Find
                 </button>
                 <button
                   className={destinationMode === "nearby" ? "destination-mode active" : "destination-mode"}
@@ -3142,6 +3147,7 @@ export function App() {
                         setActivePresetId(null);
                         setActivePresetStep(0);
                         setDestinationMode("search");
+                        setPlaceSearchError("");
                         setPlaceQuery(event.target.value);
                       }}
                       onKeyDown={handlePlaceSearchKeyDown}
@@ -3153,6 +3159,7 @@ export function App() {
                         onClick={() => {
                           setPlaceQuery("");
                           setPlaceResults([]);
+                          setPlaceSearchError("");
                           setPlaceResultFilter("all");
                           setActivePresetId(null);
                           setActivePresetStep(0);
@@ -3164,7 +3171,45 @@ export function App() {
                         <X size={15} />
                       </button>
                     ) : null}
+                    <button
+                      className="search-submit-button"
+                      onClick={() => setPlaceSearchRetryKey((key) => key + 1)}
+                      disabled={busy || searchingPlaces || placeQuery.trim().length < 3}
+                      type="button"
+                    >
+                      {searchingPlaces ? <Loader2 className="spin" size={14} /> : <Search size={14} />}
+                      <span>Search</span>
+                    </button>
                   </div>
+                  {placeSearchError ||
+                  searchingPlaces ||
+                  (placeQuery.trim().length > 0 && placeQuery.trim().length < 3) ||
+                  rankedPlaceResults.length ? (
+                    <div
+                      className={[
+                        "search-run-status",
+                        placeSearchError ? "error" : "",
+                        searchingPlaces ? "active" : ""
+                      ].filter(Boolean).join(" ")}
+                    >
+                      <span>
+                        {placeSearchError
+                          ? placeSearchError
+                          : placeQuery.trim().length < 3
+                            ? "Type 3 or more characters"
+                            : searchingPlaces
+                              ? `Searching "${placeQuery.trim()}" near ${searchAnchorLabel}`
+                              : rankedPlaceResults.length
+                                ? `${rankedPlaceResults.length} result${rankedPlaceResults.length === 1 ? "" : "s"} for "${placeQuery.trim()}"`
+                                : ""}
+                      </span>
+                      {placeSearchError ? (
+                        <button onClick={() => setPlaceSearchRetryKey((key) => key + 1)} type="button">
+                          Retry
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="search-suggestions">
                     <small>Fast search</small>
                     <div className="search-suggestion-list">
