@@ -38,5 +38,7 @@ pnpm deploy:baller
 
 The app is served on port `8327` by default.
 
-The public app is deployed on Vercel at `trip.vvitovec.com`, with `/api/*`
-rewritten to the Cloudflare Tunnel hostname `trip-api.vvitovec.com`.
+The public app is served at `trip.vvitovec.com` through the `basev-platform`
+Cloudflare Tunnel, forwarding to the Baller web service on port `8327`. The API
+is also reachable at `trip-api.vvitovec.com` and through `/api/*` on the app
+domain.
