@@ -374,6 +374,28 @@ function combineDestinationNotes(...notes: string[]) {
   return parts.filter((part, index) => parts.indexOf(part) === index).join(" · ");
 }
 
+function destinationItemKey(query: string) {
+  if (/https?:\/\//i.test(query)) return query.trim();
+  return query.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function mergeDestinationItems(items: DestinationListItem[]) {
+  const merged: DestinationListItem[] = [];
+  for (const item of items) {
+    const query = item.query.trim();
+    if (query.length < 3) continue;
+    const key = destinationItemKey(query);
+    const existingItem = merged.find((candidate) => destinationItemKey(candidate.query) === key);
+    if (existingItem) {
+      existingItem.note = combineDestinationNotes(existingItem.note, item.note);
+      continue;
+    }
+    merged.push({ query, note: item.note.trim() });
+    if (merged.length >= destinationListLimit) break;
+  }
+  return merged;
+}
+
 function cleanDestinationListLine(line: string) {
   return line
     .replace(/^\s*(?:[-*+]|\u2022|\d+[.)])\s+/, "")
@@ -435,16 +457,10 @@ function destinationItemsFromText(value: string) {
     const action = extractDestinationAction(line);
     const item = splitDestinationNote(action.query);
     item.note = combineDestinationNotes(activeSectionNote, context.note, action.note, item.note);
-    if (item.query.length < 3) continue;
-    const existingItem = items.find((existing) => existing.query === item.query);
-    if (existingItem) {
-      existingItem.note = combineDestinationNotes(existingItem.note, item.note);
-      continue;
-    }
     items.push(item);
-    if (items.length >= destinationListLimit) break;
+    if (mergeDestinationItems(items).length >= destinationListLimit) break;
   }
-  return items;
+  return mergeDestinationItems(items);
 }
 
 function destinationListItemText(item: DestinationListItem) {
@@ -1293,9 +1309,7 @@ export function App() {
 
     event.preventDefault();
     const existingItems = destinationItemsFromText(destinationListText);
-    const merged = [...existingItems, ...pastedItems]
-      .filter((item, index, list) => list.findIndex((other) => other.query === item.query) === index)
-      .slice(0, destinationListLimit);
+    const merged = mergeDestinationItems([...existingItems, ...pastedItems]);
     setDestinationListText(merged.map(destinationListItemText).join("\n"));
     setDestinationListStatus(`${merged.length} ready in the destination list.`);
     setPlaceQuery("");
