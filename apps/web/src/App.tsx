@@ -344,6 +344,15 @@ function isKnownMapShareUrl(value: string) {
   }
 }
 
+function hasKnownMapShareUrl(value: string) {
+  const matches = value.match(/https?:\/\/\S+/gi) ?? [];
+  return matches.some((match) => isKnownMapShareUrl(match.replace(/[),.]+$/, "")));
+}
+
+function isRichSingleDestinationPaste(value: string) {
+  return /[\r\n]/.test(value) || hasKnownMapShareUrl(value);
+}
+
 function isMapShareContextLine(value: string) {
   const text = value.trim();
   return Boolean(text) && !isKnownMapShareUrl(text) && !/^(?:day\s*\d+|d\d+|route|trip|itinerary)$/i.test(text);
@@ -1380,14 +1389,20 @@ export function App() {
   function handlePlaceSearchPaste(event: React.ClipboardEvent<HTMLInputElement>) {
     const pasted = event.clipboardData.getData("text");
     const pastedItems = destinationItemsFromText(pasted);
-    if (pastedItems.length < 2) return;
+    const shouldSearchSingleDestination = pastedItems.length === 1 && isRichSingleDestinationPaste(pasted);
+    if (pastedItems.length < 2 && !shouldSearchSingleDestination) return;
 
     event.preventDefault();
-    const existingItems = destinationItemsFromText(destinationListText);
-    const merged = mergeDestinationItems([...existingItems, ...pastedItems]);
-    setDestinationListText(merged.map(destinationListItemText).join("\n"));
-    setDestinationListStatus(`${merged.length} ready in the destination list.`);
-    setPlaceQuery("");
+    if (shouldSearchSingleDestination) {
+      setPlaceQuery(pastedItems[0]!.query);
+      setDestinationListStatus("");
+    } else {
+      const existingItems = destinationItemsFromText(destinationListText);
+      const merged = mergeDestinationItems([...existingItems, ...pastedItems]);
+      setDestinationListText(merged.map(destinationListItemText).join("\n"));
+      setDestinationListStatus(`${merged.length} ready in the destination list.`);
+      setPlaceQuery("");
+    }
     setPlaceResults([]);
     setPlaceResultFilter("all");
     setActivePresetId(null);
