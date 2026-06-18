@@ -1186,6 +1186,13 @@ export function App() {
         : ["landmark", "restaurant", "cafe", "viewpoint"];
     return pickPlaceChips(queries);
   }, [currentTrip?.type]);
+  const topPlaceFollowUpChips = useMemo(() => {
+    const queries =
+      currentTrip?.type === "road_trip"
+        ? ["restaurant", "parking", "fuel", "ev charging"]
+        : ["restaurant", "landmark", "cafe", "viewpoint"];
+    return pickPlaceChips(queries);
+  }, [currentTrip?.type]);
   const rankedPlaceResults = useMemo(() => {
     if (destinationSearchIntent?.kind === "nearby") return placeResults;
     if (!searchAnchor) return placeResults;
@@ -1821,6 +1828,25 @@ export function App() {
     setActivePresetStep(0);
     setPlanningPresetId(null);
     setError(null);
+  }
+
+  function searchNearPlace(place: PlaceSearchResult, query: string, savedStop?: Stop | null) {
+    if (savedStop) {
+      selectStopId(savedStop.id);
+      setSearchOrigin("context");
+    } else {
+      selectPlace(place, { revealDraft: false });
+      setSearchOrigin("draft");
+    }
+    setDestinationMode("nearby");
+    setPlaceQuery(query);
+    setPlaceResultFilter("all");
+    setActivePresetId(null);
+    setActivePresetStep(0);
+    setPlanningPresetId(null);
+    setError(null);
+    scrollToDestinationPanel();
+    window.setTimeout(() => placeSearchInputRef.current?.focus(), 0);
   }
 
   function startDestinationPreset(preset: DestinationPreset) {
@@ -3944,6 +3970,26 @@ export function App() {
                         <strong>{topVisibleRecommendation.title}</strong>
                         <small>{topVisiblePlace.name} · {topVisibleRecommendation.hint}</small>
                       </span>
+                    </div>
+                  ) : null}
+                  {topVisiblePlace ? (
+                    <div className="place-followup-search" data-testid="top-place-followup">
+                      <span>
+                        <strong>Search near {topVisibleSavedStop?.title ?? topVisiblePlace.name}</strong>
+                        <small>Use this result as the next anchor before adding it.</small>
+                      </span>
+                      <div>
+                        {topPlaceFollowUpChips.map((chip) => (
+                          <button
+                            key={chip.query}
+                            onClick={() => searchNearPlace(topVisiblePlace, chip.query, topVisibleSavedStop)}
+                            type="button"
+                          >
+                            <span>{chip.label}</span>
+                            <small>{chip.hint}</small>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                   {placeResultFilters.length > 1 ? (

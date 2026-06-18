@@ -1418,6 +1418,79 @@ textarea {
   line-height: 1.35;
 }
 
+.place-followup-search {
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  gap: 8px;
+  padding: 9px 10px;
+}
+
+.place-followup-search > span,
+.place-followup-search strong,
+.place-followup-search small {
+  display: block;
+  min-width: 0;
+}
+
+.place-followup-search strong,
+.place-followup-search small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.place-followup-search strong {
+  color: #17202a;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.place-followup-search small {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.place-followup-search > div {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.place-followup-search button {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #d6dde5;
+  border-radius: 8px;
+  background: #f8faf8;
+  color: #35536d;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.place-followup-search button span,
+.place-followup-search button small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.place-followup-search button span {
+  color: #17202a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.place-followup-search button small {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
 .place-result-filters {
   display: flex;
   gap: 7px;
@@ -2694,6 +2767,7 @@ textarea {
   .destination-presets,
   .destination-plan-steps,
   .destination-plan-actions,
+  .place-followup-search > div,
   .recent-destination-list {
     grid-template-columns: 1fr;
   }

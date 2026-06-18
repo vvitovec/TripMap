@@ -285,11 +285,16 @@ export function TripMap({
     map.on("moveend", reportCenter);
 
     mapRef.current = map;
-    return () => map.remove();
+    return () => {
+      mapRef.current = null;
+      map.remove();
+    };
   }, []);
 
   useEffect(() => {
-    const source = mapRef.current?.getSource("trips") as maplibregl.GeoJSONSource | undefined;
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    const source = map.getSource("trips") as maplibregl.GeoJSONSource | undefined;
     source?.setData(geojson);
   }, [geojson]);
 
