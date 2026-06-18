@@ -44,6 +44,11 @@ type DestinationPreset = {
 };
 type PlaceChip = { label: string; query: string; hint: string };
 type DestinationSearchSuggestion = { label: string; query: string; hint: string; mode: DestinationMode };
+type DestinationSearchIntent = {
+  kind: "category" | "nearby" | "place" | "map" | "coordinates";
+  title: string;
+  detail: string;
+};
 type DestinationListItem = { query: string; note: string };
 type QueuedPlace = {
   place: PlaceSearchResult;
@@ -155,6 +160,58 @@ const placeChipGroups = [
 ];
 
 const placeChips = placeChipGroups.flatMap((group) => group.chips);
+const searchIntentStopWords = new Set([
+  "a",
+  "around",
+  "best",
+  "find",
+  "for",
+  "good",
+  "nearby",
+  "places",
+  "search",
+  "show",
+  "the",
+  "top"
+]);
+const searchCategoryAliasEntries: Array<[string, string]> = [
+  ...placeChips.flatMap<[string, string]>((chip) => [
+    [chip.query, chip.query],
+    [chip.label.toLowerCase(), chip.query]
+  ]),
+  ["accommodation", "hotel"],
+  ["accommodations", "hotel"],
+  ["attraction", "landmark"],
+  ["attractions", "landmark"],
+  ["campground", "campsite"],
+  ["campgrounds", "campsite"],
+  ["ev charge", "ev charging"],
+  ["ev charger", "ev charging"],
+  ["ev chargers", "ev charging"],
+  ["gas", "fuel"],
+  ["gas station", "fuel"],
+  ["guest house", "guesthouse"],
+  ["guest houses", "guesthouse"],
+  ["lodging", "hotel"],
+  ["motels", "motel"],
+  ["place to stay", "hotel"],
+  ["places to stay", "hotel"],
+  ["restaurants", "restaurant"],
+  ["sight", "landmark"],
+  ["sights", "landmark"],
+  ["ski resort", "ski area"],
+  ["ski resorts", "ski area"],
+  ["stay", "hotel"],
+  ["stays", "hotel"],
+  ["things to do", "landmark"],
+  ["things to see", "landmark"],
+  ["tourist attraction", "landmark"],
+  ["tourist attractions", "landmark"],
+  ["where to stay", "hotel"]
+];
+const searchCategoryAliases = new Map<string, string>(
+  searchCategoryAliasEntries.map(([alias, query]) => [alias.toLowerCase(), query])
+);
 
 function pickPlaceChips(queries: string[]) {
   const seen = new Set<string>();
@@ -166,6 +223,155 @@ function pickPlaceChips(queries: string[]) {
       seen.add(chip.query);
       return true;
     });
+}
+
+function parseCoordinateSearch(value: string) {
+  const match = value
+    .trim()
+    .match(/^(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  const lat = Math.abs(first) <= 90 && Math.abs(second) <= 180 ? first : second;
+  const lng = lat === first ? second : first;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+function normalizeSearchCategory(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function searchCategoryIntent(value: string) {
+  const direct = normalizeSearchCategory(value);
+  if (!direct) return null;
+  const directMatch = searchCategoryAliases.get(direct);
+  if (directMatch) return directMatch;
+  const meaningful = direct
+    .split(" ")
+    .filter((token) => !searchIntentStopWords.has(token))
+    .join(" ");
+  return meaningful ? searchCategoryAliases.get(meaningful) ?? null : null;
+}
+
+function searchCategoryLabel(query: string) {
+  const chip = placeChips.find((item) => item.query === query);
+  return chip?.label ?? titleize(query);
+}
+
+function trimSearchLeadWords(value: string) {
+  const words = value.split(" ").filter(Boolean);
+  while (words.length > 1 && searchIntentStopWords.has(words[0]!.toLowerCase())) {
+    words.shift();
+  }
+  return words.join(" ");
+}
+
+function parseDestinationSearchIntent(query: string, anchorLabel: string): DestinationSearchIntent | null {
+  const normalized = query.replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  if (parseCoordinateSearch(normalized)) {
+    return {
+      kind: "coordinates",
+      title: "Coordinates",
+      detail: "This will reverse lookup the exact pin."
+    };
+  }
+  if (hasKnownMapShareUrl(normalized)) {
+    return {
+      kind: "map",
+      title: "Map link",
+      detail: "The app will extract the place name or coordinates before searching."
+    };
+  }
+
+  const lower = normalized.toLowerCase();
+  const separators = [" close to ", " next to ", " nearby ", " around ", " near ", " in ", " at "];
+  for (const separator of separators) {
+    const index = lower.indexOf(separator);
+    if (index <= 0) continue;
+    const category = searchCategoryIntent(normalized.slice(0, index));
+    const target = normalized.slice(index + separator.length).trim();
+    if (!category || target.length < 3) continue;
+    return {
+      kind: "nearby",
+      title: `${searchCategoryLabel(category)} near ${target}`,
+      detail: "Category search with that place as the search center."
+    };
+  }
+
+  const pairedParts = normalized
+    .split(/\s*[,;:]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (pairedParts.length === 2) {
+    const [first, second] = pairedParts;
+    const firstCategory = searchCategoryIntent(first!);
+    const secondCategory = searchCategoryIntent(second!);
+    if (firstCategory && second!.length >= 3) {
+      return {
+        kind: "nearby",
+        title: `${searchCategoryLabel(firstCategory)} near ${second}`,
+        detail: "Category search with that place as the search center."
+      };
+    }
+    if (secondCategory && first!.length >= 3) {
+      return {
+        kind: "nearby",
+        title: `${searchCategoryLabel(secondCategory)} near ${first}`,
+        detail: "Category search with that place as the search center."
+      };
+    }
+  }
+
+  const cleaned = trimSearchLeadWords(normalized);
+  const cleanedLower = cleaned.toLowerCase();
+  const aliases = [...searchCategoryAliases.keys()].sort((a, b) => b.length - a.length);
+  for (const alias of aliases) {
+    const suffix = ` ${alias}`;
+    if (!cleanedLower.endsWith(suffix)) continue;
+    const target = cleaned.slice(0, cleaned.length - alias.length).trim();
+    const category = searchCategoryAliases.get(alias);
+    if (category && target.length >= 3) {
+      return {
+        kind: "nearby",
+        title: `${searchCategoryLabel(category)} near ${target}`,
+        detail: "Category search with that place as the search center."
+      };
+    }
+  }
+  for (const alias of aliases) {
+    const prefix = `${alias} `;
+    if (!cleanedLower.startsWith(prefix)) continue;
+    const target = cleaned.slice(alias.length).trim();
+    const category = searchCategoryAliases.get(alias);
+    if (category && target.length >= 3) {
+      return {
+        kind: "nearby",
+        title: `${searchCategoryLabel(category)} near ${target}`,
+        detail: "Category search with that place as the search center."
+      };
+    }
+  }
+
+  const category = searchCategoryIntent(normalized);
+  if (category) {
+    return {
+      kind: "category",
+      title: searchCategoryLabel(category),
+      detail: `Category search around ${anchorLabel}.`
+    };
+  }
+  return {
+    kind: "place",
+    title: "Place or address",
+    detail: `Exact search around ${anchorLabel}.`
+  };
 }
 
 const destinationPresets: DestinationPreset[] = [
@@ -945,6 +1151,10 @@ export function App() {
       : searchOrigin === "map" && mapFocus
         ? "map center"
         : contextSearchAnchorLabel;
+  const destinationSearchIntent = useMemo(
+    () => parseDestinationSearchIntent(placeQuery, searchAnchorLabel),
+    [placeQuery, searchAnchorLabel]
+  );
   const namedSearchAnchor =
     searchOrigin === "draft" && placeDraft
       ? placeDraft.name
@@ -3310,6 +3520,15 @@ export function App() {
                       <span>Search</span>
                     </button>
                   </div>
+                  {destinationSearchIntent && placeQuery.trim().length >= 3 ? (
+                    <div className="search-intent-card" data-testid="place-search-intent">
+                      <ListFilter size={15} />
+                      <span>
+                        <strong>{destinationSearchIntent.title}</strong>
+                        <small>{destinationSearchIntent.detail}</small>
+                      </span>
+                    </div>
+                  ) : null}
                   {continuePlanningAnchor ? (
                     <div className="continue-planning-banner" data-testid="continue-planning-banner">
                       <span>

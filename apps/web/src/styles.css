@@ -1090,6 +1090,42 @@ textarea {
   line-height: 1.35;
 }
 
+.search-intent-card {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  border: 1px solid #bbebc8;
+  border-radius: 8px;
+  background: #f4fbf6;
+  color: #276749;
+  padding: 9px 10px;
+}
+
+.search-intent-card span,
+.search-intent-card strong,
+.search-intent-card small {
+  display: block;
+  min-width: 0;
+}
+
+.search-intent-card strong,
+.search-intent-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-intent-card strong {
+  font-size: 13px;
+}
+
+.search-intent-card small {
+  margin-top: 2px;
+  color: #5d7a6f;
+  font-size: 12px;
+}
+
 .nearby-groups {
   display: grid;
   gap: 12px;
