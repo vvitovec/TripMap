@@ -386,6 +386,14 @@ function nearbyCategoryIntent(query: string) {
   return nearbyCategoryQueries.get(meaningfulQuery) ?? null;
 }
 
+function canUseSuffixCategoryAlias(alias: string) {
+  const category = nearbyCategoryQueries.get(alias);
+  if (!category) return false;
+  if (alias.endsWith("s")) return true;
+  if (alias !== category) return true;
+  return ["food", "gas", "hiking", "lodging", "sightseeing", "stay", "wellness"].includes(alias);
+}
+
 function parseNaturalNearbySearch(query: string) {
   const normalized = query.replace(/\s+/g, " ").trim();
   const lower = normalized.toLowerCase();
@@ -400,7 +408,9 @@ function parseNaturalNearbySearch(query: string) {
     if (category && anchorQuery.length >= 3) return { category, anchorQuery };
   }
 
-  const suffixAliases = [...nearbyCategoryQueries.keys()].sort((a, b) => b.length - a.length);
+  const suffixAliases = [...nearbyCategoryQueries.keys()]
+    .filter(canUseSuffixCategoryAlias)
+    .sort((a, b) => b.length - a.length);
   for (const alias of suffixAliases) {
     const suffix = ` ${alias}`;
     if (!lower.endsWith(suffix)) continue;
