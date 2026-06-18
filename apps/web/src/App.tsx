@@ -1936,6 +1936,35 @@ export function App() {
     setSearchOrigin("route");
   }
 
+  function queuePlaceAndContinue(place: PlaceSearchResult) {
+    const savedStop = savedStopForPlace(place);
+    if (savedStop) {
+      selectStopId(savedStop.id);
+      resetDestinationDraft();
+      setDestinationMode("search");
+      setSearchOrigin("context");
+      setPlaceQuery("");
+      setPlaceResults([]);
+      setPlaceResultFilter("all");
+      setError(null);
+      scrollToDestinationPanel();
+      window.setTimeout(() => placeSearchInputRef.current?.focus(), 0);
+      return;
+    }
+    queuePlace(place);
+    setPlaceDraft(null);
+    setDestinationMode("search");
+    setPlaceQuery("");
+    setPlaceResults([]);
+    setPlaceResultFilter("all");
+    setActivePresetId(null);
+    setActivePresetStep(0);
+    setPlanningPresetId(null);
+    setError(null);
+    scrollToDestinationPanel();
+    window.setTimeout(() => placeSearchInputRef.current?.focus(), 0);
+  }
+
   function exploreQueuedPlace(item: QueuedPlace) {
     setPlaceDraft(item.place);
     setDraftTitle(item.title || item.place.name);
@@ -3531,6 +3560,15 @@ export function App() {
                           {destinationQueueLabel(topVisiblePlace, topVisibleSavedStop)}
                         </button>
                         <button
+                          onClick={() => queuePlaceAndContinue(topVisiblePlace)}
+                          disabled={busy || queuedPlaceIds.has(topVisiblePlace.id)}
+                          type="button"
+                          title="Queue and keep planning from this place"
+                        >
+                          {topVisibleSavedStop ? <Search size={13} /> : <Route size={13} />}
+                          {topVisibleSavedStop ? "Search there" : "Queue + next"}
+                        </button>
+                        <button
                           onClick={queueTopVisiblePlaces}
                           disabled={busy || !topQueueablePlaces.length}
                           type="button"
@@ -3630,6 +3668,16 @@ export function App() {
                         >
                           {queuedPlaceIds.has(place.id) || savedStop ? <Check size={14} /> : <ListFilter size={14} />}
                           {destinationQueueLabel(place, savedStop)}
+                        </button>
+                        <button
+                          className="place-result-continue"
+                          onClick={() => queuePlaceAndContinue(place)}
+                          disabled={busy || queuedPlaceIds.has(place.id)}
+                          type="button"
+                          title="Queue and keep planning from this place"
+                        >
+                          {savedStop ? <Search size={14} /> : <Route size={14} />}
+                          {savedStop ? "Search there" : "Queue + next"}
                         </button>
                       </article>
                     );

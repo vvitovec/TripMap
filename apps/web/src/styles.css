@@ -1358,7 +1358,7 @@ textarea {
   border-radius: 8px;
   background: #fff;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 108px;
+  grid-template-columns: minmax(0, 1fr) 118px;
   gap: 0;
   overflow: hidden;
   text-align: left;
@@ -1383,12 +1383,13 @@ textarea {
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 8px;
   text-align: left;
-  grid-row: span 3;
+  grid-row: span 4;
 }
 
 .place-result-add,
 .place-result-nearby,
-.place-result-queue {
+.place-result-queue,
+.place-result-continue {
   border: 0;
   border-left: 1px solid #edf1ee;
   background: #f8faf8;
@@ -1414,6 +1415,12 @@ textarea {
   color: #35536d;
 }
 
+.place-result-continue {
+  border-top: 1px solid #edf1ee;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
 .place-result-queue.active {
   background: #ecfdf3;
   color: #166534;
@@ -1426,7 +1433,8 @@ textarea {
 
 .place-result-add:disabled,
 .place-result-nearby:disabled,
-.place-result-queue:disabled {
+.place-result-queue:disabled,
+.place-result-continue:disabled {
   opacity: 0.5;
 }
 
@@ -2593,6 +2601,12 @@ textarea {
   }
 
   .place-result-queue {
+    min-height: 34px;
+    border-left: 0;
+    border-top: 1px solid #edf1ee;
+  }
+
+  .place-result-continue {
     min-height: 34px;
     border-left: 0;
     border-top: 1px solid #edf1ee;
