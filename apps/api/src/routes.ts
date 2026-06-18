@@ -866,8 +866,9 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
   if (cached && cached.expiresAt > Date.now()) return cached.places;
 
   const resolvedQuery = await resolveKnownMapLink(input.q);
+  const linkSearchText = mapLinkSearchText(resolvedQuery);
   const coordinates = parseCoordinateQuery(resolvedQuery);
-  if (coordinates) {
+  if (coordinates && !linkSearchText) {
     const place = await reversePlace(coordinates);
     const places = [place];
     placeSearchCache.set(cacheKey, {
@@ -877,19 +878,19 @@ async function searchPlaces(input: z.infer<typeof placeSearchSchema>) {
     return places;
   }
 
-  const linkSearchText = mapLinkSearchText(resolvedQuery);
   const queryText = linkSearchText ?? resolvedQuery.trim();
   const inputAnchor =
     input.lat !== undefined && input.lng !== undefined ? { lat: input.lat, lng: input.lng } : undefined;
+  const linkAnchor = linkSearchText && coordinates ? coordinates : undefined;
   const naturalSearch = parseNaturalNearbySearch(queryText);
   const naturalAnchor = naturalSearch
-    ? await geocodeSearchAnchor(naturalSearch.anchorQuery, inputAnchor).catch(() => null)
+    ? await geocodeSearchAnchor(naturalSearch.anchorQuery, linkAnchor ?? inputAnchor).catch(() => null)
     : null;
-  const categoryIntent = naturalSearch && (naturalAnchor || inputAnchor)
+  const categoryIntent = naturalSearch && (naturalAnchor || linkAnchor || inputAnchor)
     ? naturalSearch.category
     : nearbyCategoryIntent(queryText);
   const normalizedQuery = categoryIntent ?? queryText;
-  const searchAnchor = naturalAnchor ?? inputAnchor;
+  const searchAnchor = naturalAnchor ?? linkAnchor ?? inputAnchor;
   const hasAnchor = Boolean(searchAnchor);
   const isNearbyCategory = Boolean(categoryIntent);
 
