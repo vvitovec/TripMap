@@ -3105,10 +3105,12 @@ export function App() {
         </section>
 
         <section className="trip-list">
-          {filteredTrips.map((trip) => (
+          {filteredTrips.map((trip, index) => (
             <button
               key={trip.id}
               className={trip.id === selectedTripId ? "trip-card active" : "trip-card"}
+              data-testid={index === 0 ? "trip-list-first" : undefined}
+              data-trip-id={trip.id}
               onClick={() => selectTripId(trip.id)}
             >
               <span>{trip.type === "road_trip" ? <Route size={16} /> : <MapPin size={16} />}</span>
