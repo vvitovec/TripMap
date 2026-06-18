@@ -768,6 +768,42 @@ textarea {
   background: #fff;
 }
 
+.destination-list-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.destination-list-preview span {
+  max-width: 100%;
+  min-height: 26px;
+  border: 1px solid #dbe3df;
+  border-radius: 999px;
+  background: #fff;
+  color: #35536d;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.destination-list-preview small {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: #166534;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  font-size: 10px;
+}
+
 .destination-list-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 92px;

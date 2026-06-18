@@ -282,18 +282,42 @@ function placeLocationKey(place: PlaceSearchResult) {
   return `${normalizedPlaceName(place.name)}-${place.lat.toFixed(3)}-${place.lng.toFixed(3)}`;
 }
 
+function destinationTextSegments(value: string) {
+  return value
+    .replace(/\s*(?:->|=>|-->|>>|\u2192|\u21d2)\s*/g, "\n")
+    .replace(/[;|]+/g, "\n")
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      if (/https?:\/\//i.test(line)) return [line];
+      const routeLine = line.replace(
+        /^\s*(?:route|trip|itinerary|drive|road trip)\s*[:.)-]\s*/i,
+        ""
+      );
+      if (/\s+(?:to|via)\s+/i.test(routeLine) && !routeLine.includes(",")) {
+        return routeLine.split(/\s+(?:to|via)\s+/i);
+      }
+      return [line];
+    });
+}
+
 function cleanDestinationListLine(line: string) {
   return line
-    .replace(/^\s*(?:[-*]|\d+[.)])\s+/, "")
+    .replace(/^\s*(?:[-*+]|\u2022|\d+[.)])\s+/, "")
+    .replace(/^\s*(?:day\s*\d+|d\d+)\s*[:.)-]\s*/i, "")
+    .replace(/^\s*(?:stop|destination|leg)\s*\d*\s*[:.)-]\s*/i, "")
+    .replace(/^\s*(?:start|end|finish|route|trip|itinerary|drive|road trip)\s*[:.)-]\s*/i, "")
+    .replace(/^\s*(?:\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\s*[:-]\s*/i, "")
+    .replace(/\s+\((?:overnight|stay|lunch|dinner|breakfast|coffee|photo stop|optional)\)\s*$/i, "")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .replace(/^[,.: -]+|[,.: -]+$/g, "");
 }
 
 function destinationLinesFromText(value: string) {
-  return value
-    .split(/\r?\n/)
+  const ignored = new Set(["and", "then", "route", "trip", "itinerary", "drive", "road trip"]);
+  return destinationTextSegments(value)
     .map(cleanDestinationListLine)
-    .filter((line, index, lines) => line.length >= 3 && lines.indexOf(line) === index)
+    .filter((line, index, lines) => line.length >= 3 && !ignored.has(line.toLowerCase()) && lines.indexOf(line) === index)
     .slice(0, destinationListLimit);
 }
 
@@ -2790,9 +2814,25 @@ export function App() {
                         setDestinationListText(event.target.value);
                         setDestinationListStatus("");
                       }}
-                      placeholder={`Grand Hotel\nOld Town Square\nhttps://maps.app.goo.gl/...`}
+                      placeholder={`Grand Hotel -> Old Town Square\nDay 2: Prague to Vienna\nhttps://maps.app.goo.gl/...`}
                       rows={3}
                     />
+                    {destinationListQueries.length ? (
+                      <div className="destination-list-preview" aria-label="Parsed destinations">
+                        {destinationListQueries.slice(0, 6).map((query, index) => (
+                          <span key={`${query}-${index}`}>
+                            <small>{index + 1}</small>
+                            {query}
+                          </span>
+                        ))}
+                        {destinationListQueries.length > 6 ? (
+                          <span>
+                            <small>+</small>
+                            {destinationListQueries.length - 6} more
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="destination-list-actions">
                       <button
                         onClick={queueDestinationList}
