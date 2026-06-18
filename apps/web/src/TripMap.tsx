@@ -1,378 +1,276 @@
+import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
-import type { PlaceSearchResult, Trip } from "./types";
+import type { PlaceSearchResult, Stop, TripType } from "./types";
+
+type LatLng = { lat: number; lng: number };
 
 type Props = {
-  trips: Trip[];
-  selectedTripId: string | null;
+  stops: Stop[];
+  tripType?: TripType;
   selectedStopId?: string | null;
-  previewPlace?: PlaceSearchResult | null;
   previewPlaces?: PlaceSearchResult[];
-  previewRoute?: Array<{ lat: number; lng: number }>;
   pinMode?: boolean;
-  onSelectTrip: (id: string) => void;
+  draftPin?: LatLng | null;
   onSelectStop?: (id: string) => void;
   onSelectPreviewPlace?: (id: string) => void;
-  onMapClick: (lat: number, lng: number) => void;
+  onMapClick?: (lat: number, lng: number) => void;
   onPinMove?: (lat: number, lng: number) => void;
-  onViewChange?: (center: { lat: number; lng: number }) => void;
 };
 
 export function TripMap({
-  trips,
-  selectedTripId,
+  stops,
+  tripType = "road_trip",
   selectedStopId,
-  previewPlace,
   previewPlaces,
-  previewRoute,
   pinMode = false,
-  onSelectTrip,
+  draftPin,
   onSelectStop,
   onSelectPreviewPlace,
   onMapClick,
-  onPinMove,
-  onViewChange
+  onPinMove
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const draftPinMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const tripsSourceReadyRef = useRef(false);
-  const callbacksRef = useRef({
-    onMapClick,
-    onPinMove,
-    onSelectPreviewPlace,
-    onSelectStop,
-    onSelectTrip,
-    onViewChange,
-    pinMode
-  });
-  const previewRoutePoints = previewRoute ?? [];
+  const draftMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const sourceReadyRef = useRef(false);
+  const callbacksRef = useRef({ onMapClick, onPinMove, onSelectStop, onSelectPreviewPlace, pinMode });
 
   useEffect(() => {
-    callbacksRef.current = {
-      onMapClick,
-      onPinMove,
-      onSelectPreviewPlace,
-      onSelectStop,
-      onSelectTrip,
-      onViewChange,
-      pinMode
-    };
-  }, [onMapClick, onPinMove, onSelectPreviewPlace, onSelectStop, onSelectTrip, onViewChange, pinMode]);
+    callbacksRef.current = { onMapClick, onPinMove, onSelectStop, onSelectPreviewPlace, pinMode };
+  }, [onMapClick, onPinMove, onSelectStop, onSelectPreviewPlace, pinMode]);
 
-  const effectivePreviewPlaces = useMemo(() => {
-    const previews = new Map<string, PlaceSearchResult>();
-    previewPlaces?.forEach((place) => previews.set(place.id, place));
-    if (previewPlace && !pinMode) previews.set(previewPlace.id, previewPlace);
-    return [...previews.values()];
-  }, [pinMode, previewPlace, previewPlaces]);
+  const previews = useMemo(() => previewPlaces ?? [], [previewPlaces]);
 
   const geojson = useMemo(() => {
-    const pointFeatures = trips.flatMap((trip) =>
-      trip.stops.map((stop) => ({
-        type: "Feature" as const,
-        properties: {
-          tripId: trip.id,
-          stopId: stop.id,
-          title: stop.title,
-          tripTitle: trip.title,
-          selected: trip.id === selectedTripId,
-          activeStop: stop.id === selectedStopId,
-          branchOf: stop.branch_of ?? ""
-        },
-        geometry: {
-          type: "Point" as const,
-          coordinates: [stop.lng, stop.lat]
-        }
-      }))
-    );
-    const lineFeatures = trips
-      .flatMap((trip) => {
-        const orderedStops = [...trip.stops].sort((a, b) => a.sort_order - b.sort_order);
-        const mainStops = orderedStops.filter((stop) => !stop.branch_of);
-        const route =
-          trip.type === "road_trip" && mainStops.length > 1
-            ? [
-                {
-                  type: "Feature" as const,
-                  properties: { tripId: trip.id, selected: trip.id === selectedTripId, kind: "route" },
-                  geometry: {
-                    type: "LineString" as const,
-                    coordinates: mainStops.map((stop) => [stop.lng, stop.lat])
-                  }
-                }
-              ]
-            : [];
-        const branches = orderedStops.flatMap((stop) => {
-          if (!stop.branch_of) return [];
-          const parent = orderedStops.find((item) => item.id === stop.branch_of);
-          if (!parent) return [];
-          return [
-            {
-              type: "Feature" as const,
-              properties: { tripId: trip.id, selected: trip.id === selectedTripId, kind: "branch" },
-              geometry: {
-                type: "LineString" as const,
-                coordinates: [
-                  [parent.lng, parent.lat],
-                  [stop.lng, stop.lat]
-                ]
-              }
-            }
-          ];
-        });
-        return [...route, ...branches];
-      });
-    const previewFeatures = effectivePreviewPlaces.map((place, index) => ({
+    const ordered = [...stops].sort((a, b) => a.sort_order - b.sort_order);
+
+    const points = ordered.map((stop, index) => ({
       type: "Feature" as const,
       properties: {
-        tripId: "",
-        previewPlaceId: place.id,
-        title: effectivePreviewPlaces.length > 1 ? `${index + 1}. ${place.name}` : place.name,
-        tripTitle: "Preview",
-        selected: true,
-        preview: true
+        stopId: stop.id,
+        title: `${index + 1}. ${stop.title}`,
+        activeStop: stop.id === selectedStopId
       },
-      geometry: {
-        type: "Point" as const,
-        coordinates: [place.lng, place.lat]
-      }
+      geometry: { type: "Point" as const, coordinates: [stop.lng, stop.lat] }
     }));
-    const previewRouteFeature =
-      previewRoutePoints.length > 1
-        ? {
-            type: "Feature" as const,
-            properties: { tripId: "", selected: true, kind: "preview-route" },
-            geometry: {
-              type: "LineString" as const,
-              coordinates: previewRoutePoints.map((point) => [point.lng, point.lat])
+
+    const route =
+      tripType === "road_trip" && ordered.length > 1
+        ? [
+            {
+              type: "Feature" as const,
+              properties: { kind: "route" },
+              geometry: {
+                type: "LineString" as const,
+                coordinates: ordered.map((stop) => [stop.lng, stop.lat])
+              }
             }
-          }
-        : null;
+          ]
+        : [];
+
+    const previewPoints = previews.map((place, index) => ({
+      type: "Feature" as const,
+      properties: {
+        previewPlaceId: place.id,
+        preview: true,
+        title: previews.length > 1 ? `${index + 1}. ${place.name}` : place.name
+      },
+      geometry: { type: "Point" as const, coordinates: [place.lng, place.lat] }
+    }));
+
     return {
       type: "FeatureCollection" as const,
-      features: [
-        ...lineFeatures,
-        ...(previewRouteFeature ? [previewRouteFeature] : []),
-        ...pointFeatures,
-        ...previewFeatures
-      ]
+      features: [...route, ...points, ...previewPoints]
     };
-  }, [effectivePreviewPlaces, previewRoutePoints, selectedStopId, selectedTripId, trips]);
-  const latestGeojsonRef = useRef(geojson);
-  latestGeojsonRef.current = geojson;
+  }, [stops, previews, selectedStopId, tripType]);
+
+  const latestGeojson = useRef(geojson);
+  latestGeojson.current = geojson;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
       center: [14.43, 50.08],
-      zoom: 4,
+      zoom: 3.4,
+      attributionControl: { compact: true },
       style: {
         version: 8,
         glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
         sources: {
           satellite: {
             type: "raster",
-            tiles: [
-              "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg"
-            ],
+            tiles: ["https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg"],
             tileSize: 256,
-            attribution: "Sentinel-2 cloudless - EOX"
+            attribution: "Sentinel-2 cloudless · EOX"
           }
         },
         layers: [{ id: "satellite", type: "raster", source: "satellite" }]
       }
     });
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
     map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: true }), "top-right");
 
-    const reportCenter = () => {
-      const center = map.getCenter();
-      callbacksRef.current.onViewChange?.({ lat: center.lat, lng: center.lng });
-    };
-
     const handleLoad = () => {
-      reportCenter();
-      map.addSource("trips", { type: "geojson", data: latestGeojsonRef.current });
+      map.addSource("trip", { type: "geojson", data: latestGeojson.current });
       map.addLayer({
-        id: "trip-lines",
+        id: "route-casing",
         type: "line",
-        source: "trips",
+        source: "trip",
         filter: ["all", ["==", "$type", "LineString"], ["==", "kind", "route"]],
-        paint: {
-          "line-width": ["case", ["get", "selected"], 5, 3],
-          "line-color": ["case", ["get", "selected"], "#f97316", "#38bdf8"],
-          "line-opacity": 0.88
-        }
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#2b2620", "line-width": 6, "line-opacity": 0.5 }
       });
       map.addLayer({
-        id: "trip-branches",
+        id: "route",
         type: "line",
-        source: "trips",
-        filter: ["all", ["==", "$type", "LineString"], ["==", "kind", "branch"]],
-        paint: {
-          "line-width": ["case", ["get", "selected"], 4, 2],
-          "line-color": ["case", ["get", "selected"], "#22c55e", "#67e8f9"],
-          "line-dasharray": [1.4, 1.2],
-          "line-opacity": 0.9
-        }
+        source: "trip",
+        filter: ["all", ["==", "$type", "LineString"], ["==", "kind", "route"]],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#f3c969", "line-width": 3, "line-opacity": 0.95 }
       });
       map.addLayer({
-        id: "preview-route",
-        type: "line",
-        source: "trips",
-        filter: ["all", ["==", "$type", "LineString"], ["==", "kind", "preview-route"]],
-        paint: {
-          "line-width": 4,
-          "line-color": "#fde047",
-          "line-dasharray": [1.2, 1],
-          "line-opacity": 0.95
-        }
-      });
-      map.addLayer({
-        id: "trip-points",
+        id: "points",
         type: "circle",
-        source: "trips",
+        source: "trip",
         filter: ["==", "$type", "Point"],
         paint: {
-          "circle-radius": [
+          "circle-radius": ["case", ["get", "activeStop"], 10, ["get", "preview"], 6, 7],
+          "circle-color": ["case", ["get", "preview"], "#f6f0e4", "#c4582b"],
+          "circle-stroke-color": [
             "case",
             ["get", "activeStop"],
-            12,
-            ["get", "selected"],
-            10,
-            7
-          ],
-          "circle-color": [
-            "case",
+            "#f3c969",
             ["get", "preview"],
-            "#22c55e",
-            ["get", "activeStop"],
-            "#fde047",
-            ["get", "selected"],
-            "#f97316",
-            "#f8fafc"
+            "#a3421c",
+            "#fff7ee"
           ],
-          "circle-stroke-color": "#0f172a",
-          "circle-stroke-width": 2
+          "circle-stroke-width": ["case", ["get", "activeStop"], 3, 2.2]
         }
       });
       map.addLayer({
-        id: "trip-labels",
+        id: "labels",
         type: "symbol",
-        source: "trips",
-        filter: ["==", "$type", "Point"],
+        source: "trip",
+        filter: ["all", ["==", "$type", "Point"], ["!=", "preview", true]],
         layout: {
           "text-field": ["get", "title"],
           "text-size": 12,
-          "text-offset": [0, 1.35],
-          "text-anchor": "top"
+          "text-offset": [0, 1.3],
+          "text-anchor": "top",
+          "text-max-width": 10
         },
         paint: {
-          "text-color": "#fff",
-          "text-halo-color": "#0f172a",
-          "text-halo-width": 1.2
+          "text-color": "#fdfbf4",
+          "text-halo-color": "#2b2620",
+          "text-halo-width": 1.4
         }
       });
-      tripsSourceReadyRef.current = true;
+      sourceReadyRef.current = true;
+      fitToContent(map, stops, previews);
     };
 
     map.on("load", handleLoad);
 
-    map.on("click", "trip-points", (event) => {
+    map.on("click", "points", (event) => {
       const feature = event.features?.[0];
-      if (feature?.properties?.preview) {
-        const previewPlaceId = feature.properties.previewPlaceId;
-        if (previewPlaceId) callbacksRef.current.onSelectPreviewPlace?.(previewPlaceId);
+      const previewId = feature?.properties?.previewPlaceId;
+      if (previewId) {
+        callbacksRef.current.onSelectPreviewPlace?.(String(previewId));
         return;
       }
-      const tripId = feature?.properties?.tripId;
       const stopId = feature?.properties?.stopId;
-      if (tripId) callbacksRef.current.onSelectTrip(tripId);
-      if (stopId) callbacksRef.current.onSelectStop?.(stopId);
+      if (stopId) callbacksRef.current.onSelectStop?.(String(stopId));
+    });
+
+    map.on("mouseenter", "points", () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", "points", () => {
+      map.getCanvas().style.cursor = callbacksRef.current.pinMode ? "crosshair" : "";
     });
 
     map.on("click", (event) => {
-      const features = map.queryRenderedFeatures(event.point, { layers: ["trip-points"] });
-      if (features.length === 0 && callbacksRef.current.pinMode) {
-        callbacksRef.current.onMapClick(event.lngLat.lat, event.lngLat.lng);
+      const hits = map.queryRenderedFeatures(event.point, { layers: ["points"] });
+      if (hits.length === 0 && callbacksRef.current.pinMode) {
+        callbacksRef.current.onMapClick?.(event.lngLat.lat, event.lngLat.lng);
       }
     });
-    map.on("moveend", reportCenter);
 
     mapRef.current = map;
     return () => {
-      tripsSourceReadyRef.current = false;
-      draftPinMarkerRef.current?.remove();
-      draftPinMarkerRef.current = null;
+      sourceReadyRef.current = false;
+      draftMarkerRef.current?.remove();
+      draftMarkerRef.current = null;
       map.off("load", handleLoad);
       mapRef.current = null;
       map.remove();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // push data updates
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded() || !tripsSourceReadyRef.current) return;
-    const source = map.getSource("trips") as maplibregl.GeoJSONSource | undefined;
-    source?.setData(geojson);
+    if (!map?.isStyleLoaded() || !sourceReadyRef.current) return;
+    (map.getSource("trip") as maplibregl.GeoJSONSource | undefined)?.setData(geojson);
   }, [geojson]);
 
+  // draggable draft pin
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !pinMode || !previewPlace) {
-      draftPinMarkerRef.current?.remove();
-      draftPinMarkerRef.current = null;
+    if (!map || !pinMode || !draftPin) {
+      draftMarkerRef.current?.remove();
+      draftMarkerRef.current = null;
       return;
     }
-    if (!draftPinMarkerRef.current) {
-      const marker = new maplibregl.Marker({ color: "#22c55e", draggable: true })
-        .setLngLat([previewPlace.lng, previewPlace.lat])
+    if (!draftMarkerRef.current) {
+      const marker = new maplibregl.Marker({ color: "#c4582b", draggable: true })
+        .setLngLat([draftPin.lng, draftPin.lat])
         .addTo(map);
       marker.on("dragend", () => {
         const point = marker.getLngLat();
         callbacksRef.current.onPinMove?.(point.lat, point.lng);
       });
-      draftPinMarkerRef.current = marker;
+      draftMarkerRef.current = marker;
     }
-    draftPinMarkerRef.current.setLngLat([previewPlace.lng, previewPlace.lat]);
-  }, [pinMode, previewPlace?.id, previewPlace?.lat, previewPlace?.lng]);
+    draftMarkerRef.current.setLngLat([draftPin.lng, draftPin.lat]);
+  }, [pinMode, draftPin?.lat, draftPin?.lng]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-    map.getCanvas().style.cursor = pinMode ? "crosshair" : "";
+    if (map) map.getCanvas().style.cursor = pinMode ? "crosshair" : "";
   }, [pinMode]);
 
+  // fly to the selected stop
   useEffect(() => {
-    if (previewRoutePoints.length > 1 && mapRef.current) {
-      const bounds = new maplibregl.LngLatBounds();
-      previewRoutePoints.forEach((point) => bounds.extend([point.lng, point.lat]));
-      mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 850 });
-      return;
-    }
-    if (effectivePreviewPlaces.length === 1 && mapRef.current) {
-      const place = effectivePreviewPlaces[0]!;
-      mapRef.current.flyTo({
-        center: [place.lng, place.lat],
-        zoom: Math.max(mapRef.current.getZoom(), 12),
-        duration: 850
-      });
-      return;
-    }
-    if (effectivePreviewPlaces.length > 1 && mapRef.current) {
-      const bounds = new maplibregl.LngLatBounds();
-      effectivePreviewPlaces.forEach((place) => bounds.extend([place.lng, place.lat]));
-      mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 850 });
-      return;
-    }
-    const trip = trips.find((item) => item.id === selectedTripId);
-    if (!trip?.stops.length || !mapRef.current) return;
-    const bounds = new maplibregl.LngLatBounds();
-    trip.stops.forEach((stop) => bounds.extend([stop.lng, stop.lat]));
-    mapRef.current.fitBounds(bounds, { padding: 90, maxZoom: 12, duration: 900 });
-  }, [effectivePreviewPlaces, previewRoutePoints, selectedTripId, trips]);
+    const map = mapRef.current;
+    if (!map || !selectedStopId || previews.length) return;
+    const stop = stops.find((item) => item.id === selectedStopId);
+    if (!stop) return;
+    map.flyTo({ center: [stop.lng, stop.lat], zoom: Math.max(map.getZoom(), 12), duration: 800 });
+  }, [selectedStopId]);
+
+  // fit to previews when searching
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !previews.length) return;
+    fitToContent(map, stops, previews);
+  }, [previews]);
 
   return <div ref={containerRef} className={pinMode ? "map-canvas pin-mode" : "map-canvas"} />;
+}
+
+function fitToContent(map: maplibregl.Map, stops: Stop[], previews: PlaceSearchResult[]) {
+  const focus = previews.length ? previews : stops;
+  if (!focus.length) return;
+  if (focus.length === 1) {
+    const point = focus[0]!;
+    map.flyTo({ center: [point.lng, point.lat], zoom: Math.max(map.getZoom(), 12), duration: 800 });
+    return;
+  }
+  const bounds = new maplibregl.LngLatBounds();
+  focus.forEach((point) => bounds.extend([point.lng, point.lat]));
+  map.fitBounds(bounds, { padding: 80, maxZoom: 13, duration: 850 });
 }

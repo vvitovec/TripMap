@@ -1615,6 +1615,10 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!user) return;
     const { rows } = await pool.query(
       `SELECT t.*, f.title AS folder_title,
+        (SELECT m.id FROM media_items m
+           WHERE m.trip_id = t.id AND m.kind = 'image' AND m.thumbnail_key IS NOT NULL
+           ORDER BY m.captured_at ASC NULLS LAST, m.created_at ASC
+           LIMIT 1) AS cover_media_id,
         COALESCE(json_agg(s.* ORDER BY s.sort_order) FILTER (WHERE s.id IS NOT NULL), '[]') AS stops
        FROM trips t
        LEFT JOIN folders f ON f.id = t.folder_id
@@ -1694,6 +1698,21 @@ export async function registerRoutes(app: FastifyInstance) {
       ]
     );
     return { trip: rows[0] };
+  });
+
+  app.delete("/trips/:id", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id } = request.params as { id: string };
+    const { rowCount } = await pool.query(
+      "DELETE FROM trips WHERE id = $1 AND owner_id = $2",
+      [id, user.id]
+    );
+    if (!rowCount) {
+      reply.code(404).send({ error: "Trip not found" });
+      return;
+    }
+    return { ok: true };
   });
 
   app.get("/trips/:id/collaborators", async (request, reply) => {
@@ -1990,6 +2009,24 @@ export async function registerRoutes(app: FastifyInstance) {
       [input.stopId, id]
     );
     return { media: updated.rows[0] };
+  });
+
+  app.delete("/media/:id", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const { rows } = await pool.query("SELECT id, trip_id FROM media_items WHERE id = $1", [id]);
+    const media = rows[0];
+    if (!media) {
+      reply.code(404).send({ error: "Media not found" });
+      return;
+    }
+    if (!(await canEditTrip(media.trip_id, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    await pool.query("DELETE FROM media_items WHERE id = $1", [id]);
+    return { ok: true };
   });
 
   app.post("/media/upload", async (request, reply) => {

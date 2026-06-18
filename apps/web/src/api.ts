@@ -1,4 +1,4 @@
-import type { Collaborator, Folder, PlaceSearchResult, Stop, Trip, TripDetail, User } from "./types";
+import type { PlaceSearchResult, Stop, Trip, TripDetail, TripType, User } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
 
@@ -48,18 +48,14 @@ export const api = {
       body: JSON.stringify({ name, email, password })
     }),
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
-  folders: () => request<{ folders: Folder[] }>("/folders"),
-  createFolder: (title: string, color: string) =>
-    request<{ folder: Folder }>("/folders", {
-      method: "POST",
-      body: JSON.stringify({ title, color })
-    }),
+
   trips: () => request<{ trips: Trip[] }>("/trips"),
+  trip: (id: string) => request<TripDetail>(`/trips/${id}`),
+  sharedTrip: (token: string) => request<TripDetail>(`/share/${token}`),
   createTrip: (input: {
     title: string;
     description: string;
-    type: Trip["type"];
-    folderId?: string | null;
+    type: TripType;
     startsAt?: string | null;
     endsAt?: string | null;
   }) =>
@@ -72,7 +68,6 @@ export const api = {
     input: {
       title?: string;
       description?: string;
-      folderId?: string | null;
       startsAt?: string | null;
       endsAt?: string | null;
     }
@@ -81,31 +76,23 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
-  trip: (id: string) => request<TripDetail>(`/trips/${id}`),
-  sharedTrip: (token: string) => request<TripDetail>(`/share/${token}`),
-  collaborators: (tripId: string) =>
-    request<{ collaborators: Collaborator[] }>(`/trips/${tripId}/collaborators`),
-  addCollaborator: (tripId: string, email: string, role: Collaborator["role"]) =>
-    request<{ collaborator: Collaborator }>(`/trips/${tripId}/collaborators`, {
-      method: "POST",
-      body: JSON.stringify({ email, role })
-    }),
-  removeCollaborator: (tripId: string, userId: string) =>
-    request<{ ok: boolean }>(`/trips/${tripId}/collaborators/${userId}`, {
-      method: "DELETE"
-    }),
+  deleteTrip: (id: string) => request<{ ok: boolean }>(`/trips/${id}`, { method: "DELETE" }),
+
   searchPlaces: (query: string, near?: { lat: number; lng: number }) => {
     const params = new URLSearchParams({ q: query });
     if (near) {
       params.set("lat", String(near.lat));
       params.set("lng", String(near.lng));
     }
-    return request<{ places: PlaceSearchResult[] }>(`/places/search?${params}`, { timeoutMs: 30_000 });
+    return request<{ places: PlaceSearchResult[] }>(`/places/search?${params}`, {
+      timeoutMs: 30_000
+    });
   },
   reversePlace: (lat: number, lng: number) => {
     const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
     return request<{ place: PlaceSearchResult }>(`/places/reverse?${params}`);
   },
+
   addStop: (
     tripId: string,
     input: {
@@ -114,9 +101,6 @@ export const api = {
       lat: number;
       lng: number;
       sortOrder: number;
-      arrivedAt?: string | null;
-      departedAt?: string | null;
-      branchOf?: string | null;
     }
   ) =>
     request<{ stop: Stop }>(`/trips/${tripId}/stops`, {
@@ -126,44 +110,25 @@ export const api = {
   updateStop: (
     tripId: string,
     stopId: string,
-    input: Partial<{
-      title: string;
-      note: string;
-      lat: number;
-      lng: number;
-      sortOrder: number;
-      arrivedAt: string | null;
-      departedAt: string | null;
-      branchOf: string | null;
-    }>
+    input: Partial<{ title: string; note: string; sortOrder: number }>
   ) =>
     request<{ stop: Stop }>(`/trips/${tripId}/stops/${stopId}`, {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
   deleteStop: (tripId: string, stopId: string) =>
-    request<{ ok: boolean }>(`/trips/${tripId}/stops/${stopId}`, {
-      method: "DELETE"
-    }),
-  addNote: (tripId: string, body: string, stopId?: string | null) =>
-    request(`/trips/${tripId}/notes`, {
-      method: "POST",
-      body: JSON.stringify({ body, stopId })
-    }),
-  share: (tripId: string) =>
-    request<{ share: { token: string } }>(`/trips/${tripId}/share-links`, {
-      method: "POST"
-    }),
-  upload: (tripId: string, files: FileList, stopId?: string | null) => {
+    request<{ ok: boolean }>(`/trips/${tripId}/stops/${stopId}`, { method: "DELETE" }),
+
+  upload: (tripId: string, files: FileList | File[], stopId?: string | null) => {
     const form = new FormData();
     form.append("tripId", tripId);
     if (stopId) form.append("stopId", stopId);
     for (const file of Array.from(files)) form.append("file", file);
-    return request("/media/upload", { method: "POST", body: form });
+    return request<{ media: unknown[] }>("/media/upload", { method: "POST", body: form });
   },
-  updateMedia: (mediaId: string, stopId: string | null) =>
-    request(`/media/${mediaId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ stopId })
-    })
+  deleteMedia: (mediaId: string) =>
+    request<{ ok: boolean }>(`/media/${mediaId}`, { method: "DELETE" }),
+
+  share: (tripId: string) =>
+    request<{ share: { token: string } }>(`/trips/${tripId}/share-links`, { method: "POST" })
 };
