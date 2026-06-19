@@ -1,4 +1,4 @@
-import type { MediaItem, PlaceSearchResult } from "./types";
+import type { MediaItem, PlaceSearchResult, Stop } from "./types";
 
 export function mediaThumbUrl(item: MediaItem) {
   return item.thumbnailUrl ?? item.optimizedUrl ?? item.originalUrl ?? undefined;
@@ -77,6 +77,23 @@ export function formatTripDates(start?: string | null, end?: string | null): str
   if (validStart) return fmt(validStart, { day: "numeric", month: "short", year: "numeric" });
   if (validEnd) return fmt(validEnd, { day: "numeric", month: "short", year: "numeric" });
   return "";
+}
+
+export function formatTripTimelineDates(
+  stops: Stop[] = [],
+  fallbackStart?: string | null,
+  fallbackEnd?: string | null
+) {
+  const datedMainStops = stops
+    .filter((stop) => !stop.branch_of && stop.arrived_at)
+    .map((stop) => stop.arrived_at!)
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+  if (datedMainStops.length) {
+    return formatTripDates(datedMainStops[0], datedMainStops[datedMainStops.length - 1]);
+  }
+
+  return formatTripDates(fallbackStart, fallbackEnd);
 }
 
 export function toDateInput(value?: string | null) {

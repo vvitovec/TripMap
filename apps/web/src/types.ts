@@ -53,6 +53,7 @@ export type Trip = {
   title: string;
   description: string;
   type: TripType;
+  rating?: number | null;
   starts_at?: string | null;
   ends_at?: string | null;
   cover_media_id?: string | null;

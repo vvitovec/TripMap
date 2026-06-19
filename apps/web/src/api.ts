@@ -56,6 +56,7 @@ export const api = {
     title: string;
     description: string;
     type: TripType;
+    rating?: number | null;
     startsAt?: string | null;
     endsAt?: string | null;
   }) =>
@@ -68,6 +69,7 @@ export const api = {
     input: {
       title?: string;
       description?: string;
+      rating?: number | null;
       startsAt?: string | null;
       endsAt?: string | null;
     }
@@ -102,6 +104,9 @@ export const api = {
       lng: number;
       sortOrder: number;
       category?: string;
+      arrivedAt?: string | null;
+      departedAt?: string | null;
+      branchOf?: string | null;
     }
   ) =>
     request<{ stop: Stop }>(`/trips/${tripId}/stops`, {
@@ -111,7 +116,15 @@ export const api = {
   updateStop: (
     tripId: string,
     stopId: string,
-    input: Partial<{ title: string; note: string; sortOrder: number; category: string }>
+    input: Partial<{
+      title: string;
+      note: string;
+      sortOrder: number;
+      category: string;
+      arrivedAt: string | null;
+      departedAt: string | null;
+      branchOf: string | null;
+    }>
   ) =>
     request<{ stop: Stop }>(`/trips/${tripId}/stops/${stopId}`, {
       method: "PATCH",

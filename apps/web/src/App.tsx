@@ -77,13 +77,11 @@ export function App() {
   }, [loadDetail, loadTrips]);
 
   const createTrip = useCallback(
-    async (input: { title: string; description: string; startsAt: string | null; endsAt: string | null }) => {
+    async (input: { title: string; description: string }) => {
       const { trip } = await api.createTrip({
         title: input.title,
         description: input.description,
-        type: "road_trip",
-        startsAt: input.startsAt,
-        endsAt: input.endsAt
+        type: "road_trip"
       });
       setShowCreate(false);
       await loadTrips().catch(() => undefined);
@@ -307,15 +305,11 @@ function CreateTripModal({
   onCreate: (input: {
     title: string;
     description: string;
-    startsAt: string | null;
-    endsAt: string | null;
   }) => Promise<void>;
   onError: (m: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -333,9 +327,7 @@ function CreateTripModal({
     try {
       await onCreate({
         title: title.trim(),
-        description: description.trim(),
-        startsAt: start ? new Date(`${start}T12:00:00`).toISOString() : null,
-        endsAt: end ? new Date(`${end}T12:00:00`).toISOString() : null
+        description: description.trim()
       });
     } catch (err) {
       onError(err instanceof Error ? err.message : "Could not create trip");
@@ -352,7 +344,7 @@ function CreateTripModal({
             <X size={18} />
           </button>
         </div>
-        <p className="sub">Give your trip a name. You can add places and photos next.</p>
+        <p className="sub">Give your trip a name. Destinations, dates, rating, and photos can come next.</p>
         <form className="modal-form" onSubmit={submit}>
           <label className="field">
             <span>Trip name</span>
@@ -372,16 +364,6 @@ function CreateTripModal({
               placeholder="Ten days chasing waterfalls and midnight sun."
             />
           </label>
-          <div className="row">
-            <label className="field">
-              <span>From</span>
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>To</span>
-              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
-            </label>
-          </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-quiet" onClick={onClose}>
               Cancel

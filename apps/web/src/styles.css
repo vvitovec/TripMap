@@ -1038,6 +1038,28 @@ select:focus {
   background: var(--ink-faint);
 }
 
+.rating-control,
+.rating-read {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--gold);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.rating-control select {
+  width: auto;
+  min-height: 0;
+  padding: 0.18rem 1.6rem 0.18rem 0.45rem;
+  border-radius: 999px;
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold), var(--line) 55%);
+  background-color: color-mix(in srgb, var(--gold), var(--paper-raised) 88%);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .journal-desc {
   font-family: var(--font-display);
   font-size: 1.18rem;
@@ -1134,6 +1156,34 @@ textarea.journal-desc {
   color: var(--ink-soft);
 }
 
+.place-date,
+.place-date-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+}
+
+.place-date {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--sage);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.place-date.read-only {
+  cursor: default;
+}
+
+.place-date-edit input {
+  width: auto;
+  min-height: 0;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+}
+
 .place-kind {
   display: inline-flex;
   align-items: center;
@@ -1158,6 +1208,69 @@ textarea.journal-desc {
 .place:hover .place-tools,
 .place.active .place-tools {
   opacity: 1;
+}
+
+.subpin-list {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+  padding-left: 1rem;
+}
+
+.subpin {
+  position: relative;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--paper-raised), var(--paper) 42%);
+  cursor: pointer;
+  transition: border-color 0.16s var(--ease), background 0.16s var(--ease);
+}
+
+.subpin::before {
+  content: "";
+  position: absolute;
+  left: -1rem;
+  top: 1.3rem;
+  width: 0.65rem;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.subpin.active {
+  border-color: var(--line-strong);
+  background: var(--paper-raised);
+}
+
+.subpin-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.subpin-cat {
+  width: 28px;
+  height: 28px;
+}
+
+.subpin-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.subpin-title {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.subpin:hover .place-tools,
+.subpin.active .place-tools {
+  opacity: 1;
+}
+
+.add-subpin {
+  margin-top: 1rem;
 }
 
 .place-note {
@@ -1339,6 +1452,11 @@ textarea.note-edit {
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   animation: popIn 0.3s var(--ease);
+}
+
+.composer.subpin-composer {
+  margin-left: 1rem;
+  margin-top: 1rem;
 }
 
 .composer-head {

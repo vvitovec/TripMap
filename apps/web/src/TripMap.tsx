@@ -3,14 +3,13 @@ import maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { categoryMeta } from "./categories";
-import type { PlaceSearchResult, Stop, TripType } from "./types";
+import type { PlaceSearchResult, Stop } from "./types";
 
 type LatLng = { lat: number; lng: number };
 type StopPhoto = { id: string; url: string };
 
 type Props = {
   stops: Stop[];
-  tripType?: TripType;
   selectedStopId?: string | null;
   previewPlaces?: PlaceSearchResult[];
   pinMode?: boolean;
@@ -33,7 +32,6 @@ const prefersReducedMotion =
 
 export function TripMap({
   stops,
-  tripType = "road_trip",
   selectedStopId,
   previewPlaces,
   pinMode = false,
@@ -61,13 +59,16 @@ export function TripMap({
     () => [...stops].sort((a, b) => a.sort_order - b.sort_order),
     [stops]
   );
+  const mainStops = useMemo(() => orderedStops.filter((stop) => !stop.branch_of), [orderedStops]);
+  const mainIndexById = useMemo(
+    () => new Map(mainStops.map((stop, index) => [stop.id, index])),
+    [mainStops]
+  );
 
   // The route threads only the main stops; side-trips hang off them.
   const routeLine = useMemo(() => {
-    if (tripType !== "road_trip") return null;
-    const main = orderedStops.filter((stop) => !stop.branch_of);
-    if (main.length < 2) return null;
-    const coordinates = smoothPath(main.map((stop) => [stop.lng, stop.lat] as [number, number]));
+    if (mainStops.length < 2) return null;
+    const coordinates = smoothPath(mainStops.map((stop) => [stop.lng, stop.lat] as [number, number]));
     return {
       type: "FeatureCollection" as const,
       features: [
@@ -78,7 +79,7 @@ export function TripMap({
         }
       ]
     };
-  }, [orderedStops, tripType]);
+  }, [mainStops]);
   const latestRoute = useRef(routeLine);
   latestRoute.current = routeLine;
   const latestStops = useRef(orderedStops);
@@ -259,7 +260,7 @@ export function TripMap({
             key={stop.id}
             map={map}
             stop={stop}
-            index={index}
+            index={mainIndexById.get(stop.id) ?? index}
             active={stop.id === selectedStopId}
             visible={!stop.branch_of || branchesVisible}
             photos={photosByStop?.[stop.id] ?? EMPTY_PHOTOS}

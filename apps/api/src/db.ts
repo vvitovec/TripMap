@@ -32,6 +32,7 @@ export async function migrate() {
       title text NOT NULL,
       description text NOT NULL DEFAULT '',
       type text NOT NULL CHECK (type IN ('one_destination', 'road_trip')),
+      rating integer CHECK (rating IS NULL OR (rating >= 1 AND rating <= 10)),
       starts_at timestamptz,
       ends_at timestamptz,
       privacy text NOT NULL DEFAULT 'private',
@@ -105,6 +106,17 @@ export async function migrate() {
     );
 
     ALTER TABLE stops ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'place';
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS rating integer;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'trips_rating_range'
+      ) THEN
+        ALTER TABLE trips
+          ADD CONSTRAINT trips_rating_range
+          CHECK (rating IS NULL OR (rating >= 1 AND rating <= 10));
+      END IF;
+    END $$;
 
     CREATE INDEX IF NOT EXISTS stops_trip_order_idx ON stops(trip_id, sort_order);
     CREATE INDEX IF NOT EXISTS media_trip_idx ON media_items(trip_id, created_at);
