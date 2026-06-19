@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Worker } from "bullmq";
 import dotenv from "dotenv";
 import exif from "exif-parser";
@@ -49,6 +49,10 @@ async function putObject(key: string, body: Buffer, contentType: string) {
   );
 }
 
+async function deleteObject(key: string) {
+  await s3.send(new DeleteObjectCommand({ Bucket: env.s3Bucket, Key: key }));
+}
+
 function readExif(buffer: Buffer) {
   try {
     const parsed = exif.create(buffer).parse();
@@ -73,21 +77,22 @@ function readExif(buffer: Buffer) {
 
 async function processImage(media: any) {
   const original = await getObjectBuffer(media.original_key);
+  const uploadedKey = media.original_key as string;
   const metadata = await sharp(original).metadata();
   const extracted = readExif(original);
   const base = `processed/${media.trip_id}/${media.id}`;
   const optimizedKey = `${base}.webp`;
   const thumbKey = `${base}-thumb.webp`;
 
-  const optimized = await sharp(original)
+  const optimized = await sharp(original, { limitInputPixels: false })
     .rotate()
     .resize({ width: 2048, height: 2048, fit: "inside", withoutEnlargement: true })
-    .webp({ quality: 82 })
+    .webp({ quality: 80, effort: 5 })
     .toBuffer();
-  const thumbnail = await sharp(original)
+  const thumbnail = await sharp(original, { limitInputPixels: false })
     .rotate()
     .resize({ width: 640, height: 640, fit: "inside", withoutEnlargement: true })
-    .webp({ quality: 76 })
+    .webp({ quality: 72, effort: 4 })
     .toBuffer();
 
   await putObject(optimizedKey, optimized, "image/webp");
@@ -95,14 +100,17 @@ async function processImage(media: any) {
 
   await pool.query(
     `UPDATE media_items
-     SET optimized_key = $1, thumbnail_key = $2, width = $3, height = $4,
-         captured_at = COALESCE($5, captured_at), latitude = COALESCE($6, latitude),
-         longitude = COALESCE($7, longitude), metadata = $8, processing_status = 'ready',
+     SET original_key = $1, optimized_key = $1, thumbnail_key = $2, mime_type = 'image/webp',
+         file_name = $3, size_bytes = $4, width = $5, height = $6,
+         captured_at = COALESCE($7, captured_at), latitude = COALESCE($8, latitude),
+         longitude = COALESCE($9, longitude), metadata = $10, processing_status = 'ready',
          processing_error = NULL
-     WHERE id = $9`,
+     WHERE id = $11`,
     [
       optimizedKey,
       thumbKey,
+      `${path.parse(media.file_name).name}.webp`,
+      optimized.length,
       metadata.width ?? null,
       metadata.height ?? null,
       extracted.capturedAt,
@@ -112,6 +120,14 @@ async function processImage(media: any) {
       media.id
     ]
   );
+
+  if (uploadedKey !== optimizedKey) {
+    try {
+      await deleteObject(uploadedKey);
+    } catch (error) {
+      console.warn(`Unable to delete uploaded source ${uploadedKey}`, error);
+    }
+  }
 }
 
 async function processVideo(media: any) {

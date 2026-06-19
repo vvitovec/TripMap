@@ -1,6 +1,9 @@
 import bcrypt from "bcryptjs";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { z } from "zod";
 import { pool } from "./db.js";
 import { env } from "./env.js";
@@ -75,6 +78,61 @@ type MapyEntity = {
 const placeSearchCache = new Map<string, { expiresAt: number; places: unknown[] }>();
 const placeReverseCache = new Map<string, { expiresAt: number; place: unknown }>();
 let lastNominatimSearchAt = 0;
+
+const imageTypesByExt: Record<string, string> = {
+  ".avif": "image/avif",
+  ".gif": "image/gif",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp"
+};
+const videoTypesByExt: Record<string, string> = {
+  ".m4v": "video/mp4",
+  ".mov": "video/quicktime",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm"
+};
+
+function classifyUpload(filename: string | undefined, mimeType: string | undefined) {
+  const normalizedMime = (mimeType ?? "").split(";")[0]!.trim().toLowerCase();
+  const ext = path.extname(filename ?? "").toLowerCase();
+  if (normalizedMime.startsWith("image/")) {
+    return { kind: "image" as const, mimeType: normalizedMime };
+  }
+  if (normalizedMime.startsWith("video/")) {
+    return { kind: "video" as const, mimeType: normalizedMime };
+  }
+  if (imageTypesByExt[ext]) {
+    return { kind: "image" as const, mimeType: imageTypesByExt[ext]! };
+  }
+  if (videoTypesByExt[ext]) {
+    return { kind: "video" as const, mimeType: videoTypesByExt[ext]! };
+  }
+  return null;
+}
+
+function safeUploadName(filename: string | undefined) {
+  const name = path.basename(filename || "upload");
+  const safe = name.replace(/[^a-zA-Z0-9._ -]+/g, "_").replace(/\s+/g, " ").trim();
+  return safe || "upload";
+}
+
+async function streamUpload(part: { file: Readable }, key: string, contentType: string) {
+  let size = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      size += chunk.length;
+      callback(null, chunk);
+    }
+  });
+  const upload = putObject(key, counter, contentType);
+  await pipeline(part.file, counter);
+  await upload;
+  return size;
+}
 
 function withSoftTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -2054,11 +2112,15 @@ export async function registerRoutes(app: FastifyInstance) {
         return;
       }
 
-      const buffer = await part.toBuffer();
-      const kind = part.mimetype.startsWith("video/") ? "video" : "image";
+      const upload = classifyUpload(part.filename, part.mimetype);
+      if (!upload) {
+        reply.code(415).send({ error: "Only image and video uploads are supported" });
+        return;
+      }
       const mediaId = randomUUID();
-      const key = `originals/${tripId}/${mediaId}-${part.filename}`;
-      await putObject(key, buffer, part.mimetype);
+      const fileName = safeUploadName(part.filename);
+      const key = `originals/${tripId}/${mediaId}-${fileName}`;
+      const sizeBytes = await streamUpload(part, key, upload.mimeType);
       const { rows } = await pool.query(
         `INSERT INTO media_items
          (id, trip_id, stop_id, uploader_id, kind, original_key, mime_type, file_name, size_bytes)
@@ -2069,11 +2131,11 @@ export async function registerRoutes(app: FastifyInstance) {
           tripId,
           stopId,
           user.id,
-          kind,
+          upload.kind,
           key,
-          part.mimetype,
-          part.filename,
-          buffer.length
+          upload.mimeType,
+          fileName,
+          sizeBytes
         ]
       );
       await mediaQueue.add("process-media", { mediaId });

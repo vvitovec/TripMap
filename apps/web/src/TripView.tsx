@@ -919,7 +919,7 @@ function AddPhotos({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/*,.heic,.heif,video/*"
         multiple
         hidden
         onChange={(event) => {
