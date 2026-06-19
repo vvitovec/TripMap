@@ -12,6 +12,7 @@ export type Stop = {
   lat: number;
   lng: number;
   sort_order: number;
+  category?: string | null;
   arrived_at?: string | null;
   departed_at?: string | null;
   branch_of?: string | null;

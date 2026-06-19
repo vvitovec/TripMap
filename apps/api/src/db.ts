@@ -55,6 +55,7 @@ export async function migrate() {
       lat double precision NOT NULL,
       lng double precision NOT NULL,
       sort_order integer NOT NULL DEFAULT 0,
+      category text NOT NULL DEFAULT 'place',
       arrived_at timestamptz,
       departed_at timestamptz,
       branch_of uuid REFERENCES stops(id) ON DELETE SET NULL,
@@ -102,6 +103,8 @@ export async function migrate() {
       expires_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE stops ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'place';
 
     CREATE INDEX IF NOT EXISTS stops_trip_order_idx ON stops(trip_id, sort_order);
     CREATE INDEX IF NOT EXISTS media_trip_idx ON media_items(trip_id, created_at);

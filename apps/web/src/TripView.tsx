@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
+import { CATEGORIES, categoryMeta, inferCategory } from "./categories";
 import {
   formatTripDates,
   fromDateInput,
@@ -41,6 +42,13 @@ type Props = {
 type EditTarget = { kind: "tripDesc" | "tripDates" | "placeTitle" | "placeNote"; id?: string };
 type LightboxState = { items: MediaItem[]; index: number; caption: string };
 
+// fade thumbnails in once decoded so they don't pop against the placeholder
+const markLoaded = (event: { currentTarget: HTMLImageElement }) =>
+  event.currentTarget.classList.add("is-loaded");
+const settleCached = (el: HTMLImageElement | null) => {
+  if (el?.complete && el.naturalWidth > 0) el.classList.add("is-loaded");
+};
+
 export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted, onError }: Props) {
   const { trip, stops, media } = detail;
   const orderedStops = useMemo(() => [...stops].sort((a, b) => a.sort_order - b.sort_order), [stops]);
@@ -64,6 +72,7 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
   const [dragStopId, setDragStopId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [catPickerStopId, setCatPickerStopId] = useState<string | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const reqRef = useRef(0);
@@ -77,6 +86,34 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
     return map;
   }, [media]);
   const unsorted = useMemo(() => media.filter((item) => !item.stop_id), [media]);
+
+  const stopImages = useCallback(
+    (stopId: string) =>
+      (mediaByStop.get(stopId) ?? []).filter((item) => item.kind === "image" && mediaThumbUrl(item)),
+    [mediaByStop]
+  );
+
+  // thumbnails handed to the map for the on-pin photo carousel
+  const photosByStop = useMemo(() => {
+    const out: Record<string, { id: string; url: string }[]> = {};
+    orderedStops.forEach((stop) => {
+      const images = stopImages(stop.id);
+      if (images.length) {
+        out[stop.id] = images.map((item) => ({ id: item.id, url: mediaThumbUrl(item)! }));
+      }
+    });
+    return out;
+  }, [orderedStops, stopImages]);
+
+  const openStopPhoto = useCallback(
+    (stopId: string, index: number) => {
+      const images = stopImages(stopId);
+      if (!images.length) return;
+      const stop = orderedStops.find((item) => item.id === stopId);
+      setLightbox({ items: images, index, caption: stop?.title ?? trip.title });
+    },
+    [orderedStops, stopImages, trip.title]
+  );
 
   // keep selection valid
   useEffect(() => {
@@ -157,7 +194,8 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
           note: "",
           lat: place.lat,
           lng: place.lng,
-          sortOrder: orderedStops.length
+          sortOrder: orderedStops.length,
+          category: inferCategory(place)
         });
         setSelectedStopId(stop.id);
         resetComposer();
@@ -230,7 +268,7 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
   );
 
   const saveStop = useCallback(
-    async (stopId: string, patch: { title?: string; note?: string }) => {
+    async (stopId: string, patch: { title?: string; note?: string; category?: string }) => {
       try {
         await api.updateStop(trip.id, stopId, patch);
         onReload();
@@ -328,6 +366,7 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
           previewPlaces={previewPlaces}
           pinMode={pinMode}
           draftPin={draftPin}
+          photosByStop={photosByStop}
           onSelectStop={setSelectedStopId}
           onSelectPreviewPlace={(id) => {
             const place = results.find((item) => item.id === id);
@@ -335,6 +374,7 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
           }}
           onMapClick={handleMapClick}
           onPinMove={handlePinMove}
+          onOpenPhoto={openStopPhoto}
         />
       </div>
 
@@ -440,9 +480,8 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
             </div>
           ) : trip.description ? (
             <p
-              className="journal-desc"
+              className={readOnly ? "journal-desc" : "journal-desc editable"}
               onClick={() => !readOnly && beginEdit({ kind: "tripDesc" }, trip.description)}
-              style={{ cursor: readOnly ? "default" : "text" }}
             >
               {trip.description}
             </p>
@@ -474,6 +513,8 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
             const isActive = stop.id === selectedStopId;
             const editingTitle = edit?.kind === "placeTitle" && edit.id === stop.id;
             const editingNote = edit?.kind === "placeNote" && edit.id === stop.id;
+            const meta = categoryMeta(stop.category);
+            const CatIcon = meta.Icon;
             return (
               <article
                 key={stop.id}
@@ -481,10 +522,37 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
                 style={{ animationDelay: `${Math.min(index * 0.04, 0.3)}s` }}
                 onMouseEnter={() => undefined}
               >
-                <span className="place-index">{index + 1}</span>
+                <span className="place-index" style={{ ["--pin" as string]: meta.color }}>
+                  {index + 1}
+                </span>
 
                 <div className="place-head" onClick={() => setSelectedStopId(stop.id)}>
-                  <div style={{ minWidth: 0 }}>
+                  <span className="place-cat-wrap">
+                    <button
+                      type="button"
+                      className="place-cat"
+                      style={{ ["--pin" as string]: meta.color }}
+                      title={readOnly ? meta.label : `${meta.label} — tap to change`}
+                      disabled={readOnly}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setCatPickerStopId((current) => (current === stop.id ? null : stop.id));
+                      }}
+                    >
+                      <CatIcon size={16} strokeWidth={2.1} />
+                    </button>
+                    {catPickerStopId === stop.id && (
+                      <CategoryPicker
+                        current={meta.id}
+                        onClose={() => setCatPickerStopId(null)}
+                        onPick={(id) => {
+                          setCatPickerStopId(null);
+                          if (id !== meta.id) void saveStop(stop.id, { category: id });
+                        }}
+                      />
+                    )}
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     {editingTitle ? (
                       <input
                         autoFocus
@@ -560,7 +628,7 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
                   </div>
                 ) : stop.note ? (
                   <p
-                    className="place-note"
+                    className={readOnly ? "place-note" : "place-note editable"}
                     onClick={() => !readOnly && beginEdit({ kind: "placeNote", id: stop.id }, stop.note)}
                   >
                     {stop.note}
@@ -713,6 +781,47 @@ export function TripView({ detail, readOnly = false, onBack, onReload, onDeleted
   );
 }
 
+function CategoryPicker({
+  current,
+  onPick,
+  onClose
+}: {
+  current: string;
+  onPick: (id: string) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <>
+      <div className="cat-pop-scrim" onClick={(event) => { event.stopPropagation(); onClose(); }} />
+      <div className="cat-pop" onClick={(event) => event.stopPropagation()}>
+        {CATEGORIES.map((category) => {
+          const Icon = category.Icon;
+          return (
+            <button
+              key={category.id}
+              type="button"
+              className={category.id === current ? "cat-opt on" : "cat-opt"}
+              style={{ ["--pin" as string]: category.color }}
+              onClick={() => onPick(category.id)}
+            >
+              <Icon size={16} strokeWidth={2.1} />
+              <span>{category.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 function PhotoGrid({
   photos,
   readOnly,
@@ -734,7 +843,14 @@ function PhotoGrid({
         return (
           <div className="photo" key={item.id} onClick={() => onOpen(index)}>
             {showThumb && thumb ? (
-              <img src={thumb} alt={item.file_name} loading="lazy" />
+              <img
+                src={thumb}
+                alt={item.file_name}
+                loading="lazy"
+                ref={settleCached}
+                onLoad={markLoaded}
+                onError={markLoaded}
+              />
             ) : (
               <div className="photo processing" style={{ position: "absolute", inset: 0 }}>
                 <Play size={22} />

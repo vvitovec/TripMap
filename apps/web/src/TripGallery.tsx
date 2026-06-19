@@ -8,14 +8,26 @@ function coverUrl(mediaId?: string | null) {
   return mediaId ? `${apiBase}/media/${mediaId}/thumbnail` : null;
 }
 
+// fade covers in once decoded so they don't pop against the placeholder
+const markLoaded = (event: { currentTarget: HTMLImageElement }) =>
+  event.currentTarget.classList.add("is-loaded");
+const settleCached = (el: HTMLImageElement | null) => {
+  if (el?.complete && el.naturalWidth > 0) el.classList.add("is-loaded");
+};
+
 type Props = {
   trips: Trip[];
   userName: string;
+  loading?: boolean;
   onOpenTrip: (id: string) => void;
   onNewTrip: () => void;
 };
 
-export function TripGallery({ trips, userName, onOpenTrip, onNewTrip }: Props) {
+export function TripGallery({ trips, userName, loading = false, onOpenTrip, onNewTrip }: Props) {
+  if (loading && trips.length === 0) {
+    return <GallerySkeleton />;
+  }
+
   if (trips.length === 0) {
     return (
       <div className="page">
@@ -98,7 +110,14 @@ function TripCard({
     >
       <div className={cover ? "trip-card-cover" : "trip-card-cover empty"}>
         {cover ? (
-          <img src={cover} alt="" loading="lazy" />
+          <img
+            src={cover}
+            alt=""
+            loading="lazy"
+            ref={settleCached}
+            onLoad={markLoaded}
+            onError={markLoaded}
+          />
         ) : (
           <Compass size={36} strokeWidth={1.4} />
         )}
@@ -119,5 +138,30 @@ function TripCard({
         </div>
       </div>
     </button>
+  );
+}
+
+function GallerySkeleton() {
+  return (
+    <div className="page" aria-busy="true" aria-label="Loading your trips">
+      <div className="gallery-head">
+        <div>
+          <div className="sk sk-eyebrow" />
+          <div className="sk sk-title" />
+          <div className="sk sk-line" />
+        </div>
+      </div>
+      <div className="trip-grid">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div className="trip-card skeleton" key={i}>
+            <div className="trip-card-cover sk" />
+            <div className="trip-card-body">
+              <div className="sk sk-h" />
+              <div className="sk sk-sub" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
