@@ -861,7 +861,7 @@ function PhotoGrid({
                 <Play size={11} /> Video
               </span>
             )}
-            {processing && item.kind === "image" && (
+            {processing && (
               <span className="photo-badge">
                 <Loader2 size={11} className="spin" />
               </span>
@@ -869,7 +869,7 @@ function PhotoGrid({
             {!readOnly && (
               <button
                 className="photo-del"
-                title="Delete photo"
+                title="Delete media"
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete(item);
@@ -914,7 +914,7 @@ function AddPhotos({
         }}
       >
         {busy ? <Loader2 size={16} className="spin" /> : <ImagePlus size={16} />}
-        {busy ? "Uploading…" : drag ? "Drop them here" : "Add photos"}
+        {busy ? "Uploading…" : drag ? "Drop them here" : "Add media"}
       </button>
       <input
         ref={inputRef}
