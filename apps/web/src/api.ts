@@ -101,6 +101,7 @@ export const api = {
       lat: number;
       lng: number;
       sortOrder: number;
+      category?: string;
     }
   ) =>
     request<{ stop: Stop }>(`/trips/${tripId}/stops`, {
@@ -110,7 +111,7 @@ export const api = {
   updateStop: (
     tripId: string,
     stopId: string,
-    input: Partial<{ title: string; note: string; sortOrder: number }>
+    input: Partial<{ title: string; note: string; sortOrder: number; category: string }>
   ) =>
     request<{ stop: Stop }>(`/trips/${tripId}/stops/${stopId}`, {
       method: "PATCH",

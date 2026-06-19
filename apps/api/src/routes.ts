@@ -182,6 +182,7 @@ const stopSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   sortOrder: z.number().int().default(0),
+  category: z.string().min(1).max(40).default("place"),
   arrivedAt: z.string().datetime().nullable().optional(),
   departedAt: z.string().datetime().nullable().optional(),
   branchOf: z.string().uuid().nullable().optional()
@@ -1802,8 +1803,8 @@ export async function registerRoutes(app: FastifyInstance) {
     }
     const input = stopSchema.parse(request.body);
     const { rows } = await pool.query(
-      `INSERT INTO stops (trip_id, title, note, lat, lng, sort_order, arrived_at, departed_at, branch_of)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO stops (trip_id, title, note, lat, lng, sort_order, category, arrived_at, departed_at, branch_of)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         id,
@@ -1812,6 +1813,7 @@ export async function registerRoutes(app: FastifyInstance) {
         input.lat,
         input.lng,
         input.sortOrder,
+        input.category,
         input.arrivedAt ?? null,
         input.departedAt ?? null,
         input.branchOf ?? null
@@ -1839,7 +1841,8 @@ export async function registerRoutes(app: FastifyInstance) {
            sort_order = CASE WHEN $11 THEN $12 ELSE sort_order END,
            arrived_at = CASE WHEN $13 THEN $14 ELSE arrived_at END,
            departed_at = CASE WHEN $15 THEN $16 ELSE departed_at END,
-           branch_of = CASE WHEN $17 THEN $18 ELSE branch_of END
+           branch_of = CASE WHEN $17 THEN $18 ELSE branch_of END,
+           category = CASE WHEN $19 THEN $20 ELSE category END
        WHERE trip_id = $1 AND id = $2
        RETURNING *`,
       [
@@ -1860,7 +1863,9 @@ export async function registerRoutes(app: FastifyInstance) {
         input.departedAt !== undefined,
         input.departedAt ?? null,
         input.branchOf !== undefined,
-        input.branchOf ?? null
+        input.branchOf ?? null,
+        input.category !== undefined,
+        input.category ?? null
       ]
     );
     if (!rows[0]) {

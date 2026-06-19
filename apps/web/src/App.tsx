@@ -22,6 +22,7 @@ export function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [tripsLoaded, setTripsLoaded] = useState(false);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TripDetail | null>(null);
   const [sharedDetail, setSharedDetail] = useState<TripDetail | null>(null);
@@ -52,7 +53,9 @@ export function App() {
   }, [user]);
 
   useEffect(() => {
-    loadTrips().catch((err) => setError(err.message));
+    loadTrips()
+      .catch((err) => setError(err.message))
+      .finally(() => setTripsLoaded(true));
   }, [loadTrips]);
 
   const loadDetail = useCallback(async () => {
@@ -93,6 +96,7 @@ export function App() {
     await api.logout().catch(() => undefined);
     setUser(null);
     setTrips([]);
+    setTripsLoaded(false);
     setSelectedTripId(null);
     setDetail(null);
   }, []);
@@ -160,7 +164,7 @@ export function App() {
         <div className="topbar-actions">
           <span className="user-chip">
             <span className="avatar">{initials(user.name)}</span>
-            {user.name}
+            <span className="user-name">{user.name}</span>
           </span>
           <button className="btn btn-icon" title="Sign out" onClick={logout}>
             <LogOut size={18} />
@@ -184,6 +188,7 @@ export function App() {
         <TripGallery
           trips={trips}
           userName={user.name}
+          loading={!tripsLoaded}
           onOpenTrip={setSelectedTripId}
           onNewTrip={() => setShowCreate(true)}
         />
@@ -235,6 +240,12 @@ function AuthScreen({ onAuthed, onError }: { onAuthed: (user: User) => void; onE
 
       <div className="auth-panel">
         <div className="auth-card">
+          <span className="brand auth-card-brand">
+            <BrandMark size={32} />
+            <span className="brand-word">
+              Trip<b>Map</b>
+            </span>
+          </span>
           <h1>{mode === "login" ? "Welcome back" : "Start your atlas"}</h1>
           <p>
             {mode === "login"
@@ -307,6 +318,14 @@ function CreateTripModal({
   const [end, setEnd] = useState("");
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!title.trim()) return;
@@ -326,11 +345,13 @@ function CreateTripModal({
 
   return (
     <div className="modal-scrim" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <button className="btn btn-icon" style={{ float: "right" }} onClick={onClose}>
-          <X size={18} />
-        </button>
-        <h2>New journal</h2>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="New journal">
+        <div className="modal-head">
+          <h2>New journal</h2>
+          <button className="btn btn-icon" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
         <p className="sub">Give your trip a name. You can add places and photos next.</p>
         <form className="modal-form" onSubmit={submit}>
           <label className="field">
