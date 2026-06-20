@@ -274,6 +274,7 @@ const tripSchema = z.object({
   title: z.string().min(1).max(140),
   description: z.string().max(2000).default(""),
   type: z.enum(["one_destination", "road_trip"]),
+  rating: z.number().int().min(1).max(10).nullable().optional(),
   startsAt: z.string().datetime().nullable().optional(),
   endsAt: z.string().datetime().nullable().optional()
 });
@@ -283,6 +284,7 @@ const tripUpdateSchema = tripSchema
     folderId: true,
     title: true,
     description: true,
+    rating: true,
     startsAt: true,
     endsAt: true
   })
@@ -1781,8 +1783,8 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!user) return;
     const input = tripSchema.parse(request.body);
     const { rows } = await pool.query(
-      `INSERT INTO trips (owner_id, folder_id, title, description, type, starts_at, ends_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO trips (owner_id, folder_id, title, description, type, rating, starts_at, ends_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         user.id,
@@ -1790,6 +1792,7 @@ export async function registerRoutes(app: FastifyInstance) {
         input.title,
         input.description,
         input.type,
+        input.rating ?? null,
         input.startsAt ?? null,
         input.endsAt ?? null
       ]
@@ -1822,8 +1825,9 @@ export async function registerRoutes(app: FastifyInstance) {
        SET folder_id = CASE WHEN $2 THEN $3 ELSE folder_id END,
            title = CASE WHEN $4 THEN $5 ELSE title END,
            description = CASE WHEN $6 THEN $7 ELSE description END,
-           starts_at = CASE WHEN $8 THEN $9 ELSE starts_at END,
-           ends_at = CASE WHEN $10 THEN $11 ELSE ends_at END,
+           rating = CASE WHEN $8 THEN $9 ELSE rating END,
+           starts_at = CASE WHEN $10 THEN $11 ELSE starts_at END,
+           ends_at = CASE WHEN $12 THEN $13 ELSE ends_at END,
            updated_at = now()
        WHERE id = $1
        RETURNING *`,
@@ -1835,6 +1839,8 @@ export async function registerRoutes(app: FastifyInstance) {
         input.title ?? null,
         input.description !== undefined,
         input.description ?? null,
+        input.rating !== undefined,
+        input.rating ?? null,
         input.startsAt !== undefined,
         input.startsAt ?? null,
         input.endsAt !== undefined,
@@ -2028,7 +2034,7 @@ export async function registerRoutes(app: FastifyInstance) {
       return;
     }
     const { rowCount } = await pool.query(
-      "DELETE FROM stops WHERE trip_id = $1 AND id = $2",
+      "DELETE FROM stops WHERE trip_id = $1 AND (id = $2 OR branch_of = $2)",
       [id, stopId]
     );
     if (!rowCount) {

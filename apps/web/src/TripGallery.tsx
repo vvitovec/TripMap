@@ -1,5 +1,5 @@
 import { Compass, MapPin, Plus } from "lucide-react";
-import { formatTripDates, pluralize } from "./format";
+import { formatTripTimelineDates, pluralize } from "./format";
 import type { Trip } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "/api";
@@ -99,8 +99,8 @@ function TripCard({
   delay?: number;
 }) {
   const cover = coverUrl(trip.cover_media_id);
-  const dates = formatTripDates(trip.starts_at, trip.ends_at);
-  const placeCount = trip.stops?.length ?? 0;
+  const dates = formatTripTimelineDates(trip.stops, trip.starts_at, trip.ends_at);
+  const placeCount = trip.stops?.filter((stop) => !stop.branch_of).length ?? 0;
 
   return (
     <button
@@ -133,7 +133,7 @@ function TripCard({
         <div className="trip-card-meta">
           {dates && <span>{dates}</span>}
           {dates && placeCount > 0 && <span className="dot" />}
-          {placeCount > 0 && <span>{pluralize(placeCount, "place")}</span>}
+          {placeCount > 0 && <span>{pluralize(placeCount, "destination")}</span>}
           {!dates && placeCount === 0 && <span>Empty journal</span>}
         </div>
       </div>
