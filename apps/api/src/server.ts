@@ -8,7 +8,8 @@ import { env } from "./env.js";
 import { registerRoutes } from "./routes.js";
 import { ensureBucket } from "./storage.js";
 
-const app = Fastify({ logger: true });
+const maxUploadBytes = 1024 * 1024 * 1024;
+const app = Fastify({ logger: true, bodyLimit: maxUploadBytes });
 
 await app.register(cors, {
   origin: [env.webOrigin, "http://localhost:5173", "http://localhost:8327"],
@@ -24,8 +25,8 @@ await app.register(jwt, {
 });
 await app.register(multipart, {
   limits: {
-    fileSize: 100 * 1024 * 1024,
-    files: 12
+    fileSize: maxUploadBytes,
+    files: 50
   }
 });
 

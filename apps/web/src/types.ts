@@ -24,7 +24,7 @@ export type MediaItem = {
   stop_id?: string | null;
   kind: "image" | "video";
   file_name: string;
-  processing_status: "queued" | "processing" | "ready" | "failed";
+  processing_status: "uploading" | "queued" | "processing" | "ready" | "failed";
   optimizedUrl?: string | null;
   thumbnailUrl?: string | null;
   originalUrl?: string | null;

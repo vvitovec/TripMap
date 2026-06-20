@@ -5,6 +5,8 @@ import {
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
+import type { Readable } from "node:stream";
 import { env } from "./env.js";
 
 export const s3 = new S3Client({
@@ -25,14 +27,25 @@ export async function ensureBucket() {
   }
 }
 
-export async function putObject(key: string, body: Buffer, contentType: string) {
+export async function putObject(key: string, body: Buffer | Readable, contentType: string) {
+  const params = {
+    Bucket: env.s3Bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType
+  };
+  if (!Buffer.isBuffer(body)) {
+    await new Upload({
+      client: s3,
+      params,
+      queueSize: 2,
+      partSize: 16 * 1024 * 1024,
+      leavePartsOnError: false
+    }).done();
+    return;
+  }
   await s3.send(
-    new PutObjectCommand({
-      Bucket: env.s3Bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType
-    })
+    new PutObjectCommand(params)
   );
 }
 

@@ -1,11 +1,20 @@
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand
+} from "@aws-sdk/client-s3";
 import bcrypt from "bcryptjs";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { z } from "zod";
 import { pool } from "./db.js";
 import { env } from "./env.js";
 import { mediaQueue } from "./queue.js";
-import { getObject, putObject } from "./storage.js";
+import { getObject, putObject, s3 } from "./storage.js";
 
 type AuthUser = { id: string; email: string; name: string };
 type PlaceResult = {
@@ -71,10 +80,118 @@ type MapyEntity = {
   regionalStructure?: Array<{ name: string; type: string; isoCode?: string }>;
   zip?: string;
 };
+type UploadKind = "image" | "video";
 
 const placeSearchCache = new Map<string, { expiresAt: number; places: unknown[] }>();
 const placeReverseCache = new Map<string, { expiresAt: number; place: unknown }>();
 let lastNominatimSearchAt = 0;
+const chunkedUploadPartBytes = 32 * 1024 * 1024;
+const directUploadThresholdBytes = 48 * 1024 * 1024;
+
+const imageTypesByExt: Record<string, string> = {
+  ".avif": "image/avif",
+  ".gif": "image/gif",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp"
+};
+const videoTypesByExt: Record<string, string> = {
+  ".3g2": "video/3gpp2",
+  ".3gp": "video/3gpp",
+  ".avi": "video/x-msvideo",
+  ".m4v": "video/mp4",
+  ".m2ts": "video/mp2t",
+  ".mkv": "video/x-matroska",
+  ".mov": "video/quicktime",
+  ".mp4": "video/mp4",
+  ".mpeg": "video/mpeg",
+  ".mpg": "video/mpeg",
+  ".mts": "video/mp2t",
+  ".ogv": "video/ogg",
+  ".webm": "video/webm"
+};
+
+function classifyUpload(filename: string | undefined, mimeType: string | undefined) {
+  const normalizedMime = (mimeType ?? "").split(";")[0]!.trim().toLowerCase();
+  const ext = path.extname(filename ?? "").toLowerCase();
+  if (normalizedMime.startsWith("image/")) {
+    return { kind: "image" as const, mimeType: normalizedMime };
+  }
+  if (normalizedMime.startsWith("video/")) {
+    return { kind: "video" as const, mimeType: normalizedMime };
+  }
+  if (imageTypesByExt[ext]) {
+    return { kind: "image" as const, mimeType: imageTypesByExt[ext]! };
+  }
+  if (videoTypesByExt[ext]) {
+    return { kind: "video" as const, mimeType: videoTypesByExt[ext]! };
+  }
+  return null;
+}
+
+function safeUploadName(filename: string | undefined) {
+  const name = path.basename(filename || "upload");
+  const safe = name.replace(/[^a-zA-Z0-9._ -]+/g, "_").replace(/\s+/g, " ").trim();
+  return safe || "upload";
+}
+
+async function createQueuedMedia(input: {
+  id?: string;
+  tripId: string;
+  stopId: string | null;
+  userId: string;
+  kind: UploadKind;
+  key: string;
+  mimeType: string;
+  fileName: string;
+  sizeBytes: number;
+  status?: string;
+}) {
+  const { rows } = await pool.query(
+    `INSERT INTO media_items
+     (id, trip_id, stop_id, uploader_id, kind, original_key, mime_type, file_name, size_bytes, processing_status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING *`,
+    [
+      input.id ?? randomUUID(),
+      input.tripId,
+      input.stopId,
+      input.userId,
+      input.kind,
+      input.key,
+      input.mimeType,
+      input.fileName,
+      input.sizeBytes,
+      input.status ?? "queued"
+    ]
+  );
+  return rows[0];
+}
+
+async function getEditableMedia(mediaId: string, userId: string) {
+  const { rows } = await pool.query("SELECT * FROM media_items WHERE id = $1", [mediaId]);
+  const media = rows[0];
+  if (!media) return null;
+  if (!(await canEditTrip(media.trip_id, userId))) return false;
+  return media;
+}
+
+async function streamUpload(part: { file: Readable }, key: string, contentType: string) {
+  let size = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      size += chunk.length;
+      callback(null, chunk);
+    }
+  });
+  const upload = putObject(key, counter, contentType);
+  await pipeline(part.file, counter);
+  await upload;
+  return size;
+}
 
 function withSoftTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -194,6 +311,32 @@ const stopUpdateSchema = stopSchema.partial();
 
 const mediaUpdateSchema = z.object({
   stopId: z.string().uuid().nullable()
+});
+
+const mediaUploadInitSchema = z.object({
+  tripId: z.string().uuid(),
+  stopId: z.string().uuid().nullable().optional(),
+  fileName: z.string().min(1).max(500),
+  mimeType: z.string().max(120).optional(),
+  sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+});
+
+const mediaUploadPartQuerySchema = z.object({
+  uploadId: z.string().min(1),
+  partNumber: z.coerce.number().int().min(1).max(10_000)
+});
+
+const mediaUploadCompleteSchema = z.object({
+  uploadId: z.string().min(1),
+  parts: z
+    .array(
+      z.object({
+        partNumber: z.number().int().min(1).max(10_000),
+        etag: z.string().min(1)
+      })
+    )
+    .min(1)
+    .max(10_000)
 });
 
 const placeSearchSchema = z.object({
@@ -2040,6 +2183,159 @@ export async function registerRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.post("/media-uploads/init", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const input = mediaUploadInitSchema.parse(request.body);
+    if (!(await canEditTrip(input.tripId, user.id))) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    const upload = classifyUpload(input.fileName, input.mimeType);
+    if (!upload) {
+      reply.code(415).send({ error: "Only image and video uploads are supported" });
+      return;
+    }
+    const mediaId = randomUUID();
+    const fileName = safeUploadName(input.fileName);
+    const key = `originals/${input.tripId}/${mediaId}-${fileName}`;
+    const multipart = await s3.send(
+      new CreateMultipartUploadCommand({
+        Bucket: env.s3Bucket,
+        Key: key,
+        ContentType: upload.mimeType
+      })
+    );
+    if (!multipart.UploadId) {
+      reply.code(500).send({ error: "Could not start upload" });
+      return;
+    }
+    try {
+      await createQueuedMedia({
+        id: mediaId,
+        tripId: input.tripId,
+        stopId: input.stopId ?? null,
+        userId: user.id,
+        kind: upload.kind,
+        key,
+        mimeType: upload.mimeType,
+        fileName,
+        sizeBytes: input.sizeBytes,
+        status: "uploading"
+      });
+    } catch (error) {
+      if (multipart.UploadId) {
+        await s3.send(
+          new AbortMultipartUploadCommand({
+            Bucket: env.s3Bucket,
+            Key: key,
+            UploadId: multipart.UploadId
+          })
+        ).catch(() => undefined);
+      }
+      throw error;
+    }
+    return {
+      mediaId,
+      uploadId: multipart.UploadId,
+      chunkSize: chunkedUploadPartBytes,
+      directUploadThreshold: directUploadThresholdBytes
+    };
+  });
+
+  app.post("/media-uploads/:mediaId/parts", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { mediaId } = z.object({ mediaId: z.string().uuid() }).parse(request.params);
+    const input = mediaUploadPartQuerySchema.parse(request.query);
+    const media = await getEditableMedia(mediaId, user.id);
+    if (media === null) {
+      reply.code(404).send({ error: "Upload not found" });
+      return;
+    }
+    if (media === false) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    const part = await request.file();
+    if (!part) {
+      reply.code(400).send({ error: "Upload chunk is missing" });
+      return;
+    }
+    const buffer = await part.toBuffer();
+    const result = await s3.send(
+      new UploadPartCommand({
+        Bucket: env.s3Bucket,
+        Key: media.original_key,
+        UploadId: input.uploadId,
+        PartNumber: input.partNumber,
+        Body: buffer,
+        ContentLength: buffer.length
+      })
+    );
+    return { part: { partNumber: input.partNumber, etag: result.ETag } };
+  });
+
+  app.post("/media-uploads/:mediaId/complete", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { mediaId } = z.object({ mediaId: z.string().uuid() }).parse(request.params);
+    const input = mediaUploadCompleteSchema.parse(request.body);
+    const media = await getEditableMedia(mediaId, user.id);
+    if (media === null) {
+      reply.code(404).send({ error: "Upload not found" });
+      return;
+    }
+    if (media === false) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    await s3.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: env.s3Bucket,
+        Key: media.original_key,
+        UploadId: input.uploadId,
+        MultipartUpload: {
+          Parts: input.parts
+            .slice()
+            .sort((a, b) => a.partNumber - b.partNumber)
+            .map((part) => ({ ETag: part.etag, PartNumber: part.partNumber }))
+        }
+      })
+    );
+    const { rows } = await pool.query(
+      "UPDATE media_items SET processing_status = 'queued', processing_error = NULL WHERE id = $1 RETURNING *",
+      [mediaId]
+    );
+    await mediaQueue.add("process-media", { mediaId });
+    return { media: rows[0] };
+  });
+
+  app.delete("/media-uploads/:mediaId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const { mediaId } = z.object({ mediaId: z.string().uuid() }).parse(request.params);
+    const input = z.object({ uploadId: z.string().min(1) }).parse(request.query);
+    const media = await getEditableMedia(mediaId, user.id);
+    if (media === null) {
+      reply.code(404).send({ error: "Upload not found" });
+      return;
+    }
+    if (media === false) {
+      reply.code(403).send({ error: "No edit access" });
+      return;
+    }
+    await s3.send(
+      new AbortMultipartUploadCommand({
+        Bucket: env.s3Bucket,
+        Key: media.original_key,
+        UploadId: input.uploadId
+      })
+    ).catch(() => undefined);
+    await pool.query("DELETE FROM media_items WHERE id = $1 AND processing_status = 'uploading'", [mediaId]);
+    return { ok: true };
+  });
+
   app.post("/media/upload", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
@@ -2060,30 +2356,28 @@ export async function registerRoutes(app: FastifyInstance) {
         return;
       }
 
-      const buffer = await part.toBuffer();
-      const kind = part.mimetype.startsWith("video/") ? "video" : "image";
+      const upload = classifyUpload(part.filename, part.mimetype);
+      if (!upload) {
+        reply.code(415).send({ error: "Only image and video uploads are supported" });
+        return;
+      }
       const mediaId = randomUUID();
-      const key = `originals/${tripId}/${mediaId}-${part.filename}`;
-      await putObject(key, buffer, part.mimetype);
-      const { rows } = await pool.query(
-        `INSERT INTO media_items
-         (id, trip_id, stop_id, uploader_id, kind, original_key, mime_type, file_name, size_bytes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING *`,
-        [
-          mediaId,
-          tripId,
-          stopId,
-          user.id,
-          kind,
-          key,
-          part.mimetype,
-          part.filename,
-          buffer.length
-        ]
-      );
+      const fileName = safeUploadName(part.filename);
+      const key = `originals/${tripId}/${mediaId}-${fileName}`;
+      const sizeBytes = await streamUpload(part, key, upload.mimeType);
+      const media = await createQueuedMedia({
+        id: mediaId,
+        tripId,
+        stopId,
+        userId: user.id,
+        kind: upload.kind,
+        key,
+        mimeType: upload.mimeType,
+        fileName,
+        sizeBytes
+      });
       await mediaQueue.add("process-media", { mediaId });
-      created.push(rows[0]);
+      created.push(media);
     }
 
     return { media: created };
