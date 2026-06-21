@@ -36,6 +36,12 @@ Run:
 pnpm deploy:baller
 ```
 
+Verify the public production surfaces:
+
+```bash
+pnpm verify:production
+```
+
 The app is served on port `8327` by default.
 
 The public app is served at `trip.vvitovec.com` through the `basev-platform`
