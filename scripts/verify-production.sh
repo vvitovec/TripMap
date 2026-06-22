@@ -4,6 +4,7 @@ set -euo pipefail
 URLS=(
   "${WEB_URL:-https://trip.vvitovec.com}"
   "${API_HEALTH_URL:-https://trip-api.vvitovec.com/health}"
+  "${APP_API_HEALTH_URL:-https://trip.vvitovec.com/api/health}"
 )
 
 for url in "${URLS[@]}"; do
