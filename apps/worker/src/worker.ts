@@ -92,11 +92,12 @@ async function deleteObject(key: string) {
 function readExif(buffer: Buffer) {
   try {
     const parsed = exif.create(buffer).parse();
+    const capturedAtSeconds = parseNumber(parsed.tags.DateTimeOriginal);
     return {
-      latitude: parsed.tags.GPSLatitude,
-      longitude: parsed.tags.GPSLongitude,
-      capturedAt: parsed.tags.DateTimeOriginal
-        ? new Date(parsed.tags.DateTimeOriginal * 1000).toISOString()
+      latitude: parseNumber(parsed.tags.GPSLatitude),
+      longitude: parseNumber(parsed.tags.GPSLongitude),
+      capturedAt: capturedAtSeconds
+        ? new Date(capturedAtSeconds * 1000).toISOString()
         : null,
       metadata: {
         make: parsed.tags.Make,
