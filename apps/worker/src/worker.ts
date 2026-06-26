@@ -16,6 +16,20 @@ import pg from "pg";
 import sharp from "sharp";
 import { env } from "./env.js";
 
+type MediaKind = "image" | "video";
+
+type MediaItem = {
+  id: string;
+  trip_id: string;
+  kind: MediaKind;
+  original_key: string;
+  file_name: string;
+};
+
+type MediaProcessingJob = {
+  mediaId: string;
+};
+
 dotenv.config();
 
 const execFileAsync = promisify(execFile);
@@ -148,9 +162,9 @@ async function probeVideo(filePath: string) {
   }
 }
 
-async function processImage(media: any) {
+async function processImage(media: MediaItem) {
   const original = await getObjectBuffer(media.original_key);
-  const uploadedKey = media.original_key as string;
+  const uploadedKey = media.original_key;
   const metadata = await sharp(original).metadata();
   const extracted = readExif(original);
   const base = `processed/${media.trip_id}/${media.id}`;
@@ -203,8 +217,8 @@ async function processImage(media: any) {
   }
 }
 
-async function processVideo(media: any) {
-  const uploadedKey = media.original_key as string;
+async function processVideo(media: MediaItem) {
+  const uploadedKey = media.original_key;
   const dir = await mkdtemp(path.join(tmpdir(), "tripmap-"));
   const input = path.join(dir, path.basename(media.file_name || "upload"));
   const output = path.join(dir, "optimized.mp4");
@@ -292,15 +306,15 @@ async function processVideo(media: any) {
   }
 }
 
-new Worker(
+new Worker<MediaProcessingJob>(
   "media-processing",
   async (job) => {
-    const mediaId = job.data.mediaId as string;
+    const { mediaId } = job.data;
     await pool.query(
       "UPDATE media_items SET processing_status = 'processing' WHERE id = $1",
       [mediaId]
     );
-    const { rows } = await pool.query("SELECT * FROM media_items WHERE id = $1", [
+    const { rows } = await pool.query<MediaItem>("SELECT * FROM media_items WHERE id = $1", [
       mediaId
     ]);
     const media = rows[0];
